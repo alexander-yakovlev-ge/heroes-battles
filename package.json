@@ -1,0 +1,21 @@
+{
+  "name": "heroes-battles",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:rules": "pnpm --filter @hb/rules-tests test:emulator",
+    "verify": "docker compose -f docker/compose.yml up --build --abort-on-container-exit --exit-code-from verify verify"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "turbo": "^2.11.7",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

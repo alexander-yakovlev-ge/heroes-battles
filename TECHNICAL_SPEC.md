@@ -201,39 +201,39 @@ packages/
 | 1 | Peasant — дешёвое «мясо» | Slinger (С) — слабый стрелок с большим боезапасом |
 | 2 | Spearman — `unlimited_retaliation` | Archer (С) — основной стрелок |
 | 3 | Griffin (Л) — `unlimited_retaliation` | Swordsman — `aura_defense` |
-| 4 | Monk (С) — магический выстрел, без штрафа вплотную | Inquisitor — снимает бафы с цели при ударе |
+| 4 | Monk (С) — `no_melee_penalty` | Inquisitor — `dispel_on_hit` |
 | 5 | Cavalier (К) — `charge` | Paladin — `caster`: Cure союзнику раз в бой |
 | 6 | Angel (Л) — сильный ближний бой | Seraph (Л, С) — небесный стрелок |
-| 7 | Archangel (К, Л) — `rebirth` для союзного стака | Gold Dragon (К, Л) — `fire_breath`, `magic_resist` |
+| 7 | Archangel (К, Л) — `caster`: Resurrection союзнику раз в бой | Gold Dragon (К, Л) — `fire_breath`, `magic_resist` |
 
 #### Некроманты (`necro`) — живучесть, поднятие павших; все юниты `undead`
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Skeleton — дешёвый, много в стаке | Skeleton Archer (С) |
 | 2 | Zombie — медленный, много HP | Ghoul — быстрый, `poison` |
-| 3 | Ghost (Л) — `incorporeal` | Banshee (Л) — при ударе −2 инициативы цели |
-| 4 | Vampire (Л) — `life_drain`, `no_retaliation` | Mummy — при ударе −атака цели (проклятие) |
-| 5 | Lich (С) — `area_attack` | Death Knight (К) — `charge`, шанс двойного урона |
+| 3 | Ghost (Л) — `incorporeal` | Banshee (Л) — `initiative_drain` |
+| 4 | Vampire (Л) — `life_drain`, `no_retaliation` | Mummy — `curse_on_hit` |
+| 5 | Lich (С) — `area_attack` | Death Knight (К) — `charge`, `deadly_strike` |
 | 6 | Abomination (К) — танк, `poison` | Shadow Wyvern (К, Л) — `poison` |
-| 7 | Bone Dragon (К, Л) — −1 инициатива врагам рядом | Lich Lord (К, С) — `area_attack`, `mana_drain` |
+| 7 | Bone Dragon (К, Л) — `aura_dread` | Lich Lord (К, С) — `area_attack`, `mana_drain` |
 
 #### Маги (`wizard`) — стрелки, сопротивление магии, конструкты
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Gremlin (С) — слабый стрелок | Brass Sentry — конструкт, высокая защита |
-| 2 | Gargoyle (Л) — иммунитет к яду | Stone Hound — быстрый ближний бой |
+| 2 | Gargoyle (Л) — `poison_immune` | Stone Hound — быстрый ближний бой |
 | 3 | Iron Golem — `magic_resist` | Clay Golem — `regeneration` |
-| 4 | Mage (С) — без штрафа вплотную | Enchanter — `caster`: Haste союзнику раз в бой |
+| 4 | Mage (С) — `no_melee_penalty` | Enchanter — `caster`: Haste союзнику раз в бой |
 | 5 | Genie (Л) — `caster`: случайный баф союзнику | Naga — `no_retaliation` |
 | 6 | Stone Colossus (К) — сильный ближний бой | Storm Elemental (Л) — `chain_attack` |
-| 7 | Titan (К, С) — молния, без штрафа вплотную | Arcane Dragon (К, Л) — иммунитет к заклинаниям |
+| 7 | Titan (К, С) — `no_melee_penalty` | Arcane Dragon (К, Л) — `spell_immune` |
 
 #### Эльфы (`elf`) — скорость, стрелки, контроль
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Sprite (Л) — `no_retaliation` | Wood Scout — быстрый ближний бой |
 | 2 | Elven Archer (С) — `double_attack` при выстреле | Dryad — `entangle` |
-| 3 | Druid (С) — магический выстрел | Dire Wolf — `double_attack` |
+| 3 | Druid (С) — `no_melee_penalty` | Dire Wolf — `double_attack` |
 | 4 | Unicorn (К) — `aura_magic_resist` | Centaur (С) — высокая скорость |
 | 5 | Treant (К) — танк, `entangle` | Ranger (С) — `ignore_range_penalty` |
 | 6 | Phoenix (Л) — `rebirth` себя раз в бой | Forest Guardian (К) — `area_attack` |
@@ -258,18 +258,18 @@ packages/
 | 3 | Succubus (С) — огненный выстрел | Flame Lasher — `no_retaliation` |
 | 4 | Nightmare (К) — `charge` | Cerberus — `area_attack` (три головы) |
 | 5 | Infernal Fiend — `fire_aura` | Brimstone Thrower (С) — `area_attack` |
-| 6 | Efreet (Л) — иммунитет к огню, `fire_aura` | Lava Brute (К) — танк, иммунитет к огню |
-| 7 | Archfiend (К) — `teleport`, `no_retaliation` | Doom Lord (К) — `area_attack`, иммунитет к огню |
+| 6 | Efreet (Л) — `fire_immune`, `fire_aura` | Lava Brute (К) — танк, `fire_immune` |
+| 7 | Archfiend (К) — `teleport`, `no_retaliation` | Doom Lord (К) — `area_attack`, `fire_immune` |
 
 #### Тёмные эльфы (`dungeon`) — яды, контроль, засады
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
-| 1 | Troglodyte — иммунитет к Blind | Cave Spider — `poison` |
+| 1 | Troglodyte — `blind_immune` | Cave Spider — `poison` |
 | 2 | Harpy (Л) — `return_strike` | Dark Scout (С) — слабый стрелок |
 | 3 | Shadow Crossbowman (С) | Assassin — `double_attack` |
 | 4 | Medusa (С) — `petrify` | Lizard Rider — `charge` |
 | 5 | Minotaur — высокая атака | Deep Witch (С) — `caster`: Confusion раз в бой |
-| 6 | Manticore (К, Л) — `poison` | Hydra (К) — бьёт всех соседних врагов, `no_retaliation` |
+| 6 | Manticore (К, Л) — `poison` | Hydra (К) — `all_around_attack`, `no_retaliation` |
 | 7 | Shadow Dragon (К, Л) — `fire_breath` | Shadow Matriarch (С) — `area_attack`, `mana_drain` |
 
 #### Гномы (`fortress`) — оборона, руны, машины
@@ -277,10 +277,10 @@ packages/
 |---|---|---|
 | 1 | Dwarf Defender — высокая защита | Hammer Hurler (С) |
 | 2 | Boar Rider — `charge` | Shieldbearer — `aura_defense` |
-| 3 | Rune Caster (С) — магический выстрел | Clan Elder — много HP, `unlimited_retaliation` |
+| 3 | Rune Caster (С) — `no_melee_penalty` | Clan Elder — много HP, `unlimited_retaliation` |
 | 4 | Ironguard — танк | Ballista Crew (С) — медленный, `ignore_range_penalty` |
 | 5 | Roc (К, Л) | Mountain Bear (К) — `double_attack` |
-| 6 | Magma Golem (К) — `fire_aura` | Rune Golem (К) — иммунитет к заклинаниям |
+| 6 | Magma Golem (К) — `fire_aura` | Rune Golem (К) — `spell_immune` |
 | 7 | Magma Dragon (К) — `fire_breath`, не летает | Steam Juggernaut (К, С) — `area_attack` |
 
 Все имена рабочие; перед релизом сверяются со списками юнитов heroeswm.ru и Heroes of Might and Magic и при совпадении отличительных названий заменяются.
@@ -490,7 +490,7 @@ damage = max(1, floor(base * attackMultiplier * modifiers))
 | `no_retaliation` | Цель не наносит ответный удар |
 | `life_drain` | 50% нанесённого урона восстанавливает HP стака, в том числе поднимает погибших существ (не выше `initialCount`) |
 | `area_attack` | Урон по цели и всем юнитам в соседних клетках (3×3), включая своих |
-| `poison` | Яд: урон `10% от health × count` в начале хода цели, 3 раунда |
+| `poison` | Яд: в начале хода цели урон `20%` от урона отравившего удара, 3 раунда; не действует на нежить и `poison_immune` |
 | `fire_breath` | Урон по цели и клетке за ней |
 | `unlimited_retaliation` | Отвечает на все атаки ближнего боя, а не 1 раз за раунд |
 | `charge` | +5% урона за каждую клетку, пройденную перед атакой (макс. +50%) |
@@ -498,19 +498,30 @@ damage = max(1, floor(base * attackMultiplier * modifiers))
 | `petrify` | Шанс 20% при ударе: цель пропускает следующий ход |
 | `stun` | Шанс 20% при ударе: цель теряет 50% инициативы на 1 раунд |
 | `regeneration` | В начале хода восстанавливает HP верхнего существа стака |
-| `rebirth` | Раз в бой: поднимает 30% погибших существ (себя или союзного стака) |
+| `rebirth` | Раз в бой при гибели стака: возрождает 30% от начальной численности |
 | `incorporeal` | Шанс 30% избежать урона от атаки ближнего боя |
 | `magic_resist` | −50% урона и длительности вражеских заклинаний |
 | `aura_magic_resist` | `magic_resist` для союзников в соседних клетках |
 | `aura_defense` | +20% защиты союзникам в соседних клетках |
-| `fire_aura` | В начале хода наносит урон всем соседним врагам |
-| `mana_drain` | При атаке сжигает ману героя противника |
-| `caster` | Раз в бой вместо атаки применяет указанное заклинание (сила — от числа существ) |
+| `fire_aura` | В начале хода наносит соседним врагам `25%` среднего урона стака (кроме `fire_immune`) |
+| `mana_drain` | При атаке сжигает ману героя противника: `max(1, round(вес стака / 20))` |
+| `caster` | Раз в бой вместо атаки применяет указанное заклинание; сила = `max(1, round(вес стака / 10))` |
 | `chain_attack` | Атака перескакивает на 2 ближайших врагов с уроном 50% и 25% |
 | `return_strike` | После атаки возвращается на исходную клетку |
 | `teleport` | Перемещается в любую свободную клетку в пределах `speed` без учёта пути |
 | `ignore_range_penalty` | Нет штрафа за дальность стрельбы |
-| `undead` | Иммунитет к яду и Blind; цель для Raise Dead |
+| `undead` | Иммунитет к яду и Blind; цель для Raise Dead, не цель для Resurrection |
+| `aura_dread` | Соседние враги −1 к инициативе |
+| `no_melee_penalty` | Нет штрафа при стрельбе вплотную к врагу |
+| `all_around_attack` | Ближний бой: урон и всем остальным соседним врагам |
+| `deadly_strike` | Шанс 20% нанести двойной урон |
+| `initiative_drain` | При ударе −2 инициативы цели на 2 раунда |
+| `curse_on_hit` | При ударе −3 атаки цели на 2 раунда |
+| `dispel_on_hit` | При ударе снимает с цели положительные эффекты |
+| `fire_immune` | Не получает урон от огня (`fire_breath`, `fire_aura`, огненные заклинания) |
+| `poison_immune` | Иммунитет к яду |
+| `blind_immune` | Иммунитет к Blind |
+| `spell_immune` | Не может быть целью заклинаний и не получает от них урон |
 
 ### 5.7 Заклинания
 
@@ -757,7 +768,7 @@ Battle Screen
 - **Референсы**: heroeswm.ru используется только как ориентир по жанру, пропорциям и «настроению» юнитов. Запрещено: копировать, обводить, перерисовывать близко к оригиналу изображения, повторять узнаваемые элементы дизайна конкретных юнитов, использовать оригинальные файлы.
 - **Набор на юнит**: статичный спрайт + иконка; анимации — программные (перемещение, «удар», тряска при получении урона, затухание при гибели) средствами Skia, без покадровой анимации на старте.
 - **Скины** — вариации базового спрайта (перекраска, дополнительные элементы) с сохранением силуэта (§12.2).
-- **Процесс**: черновик ассетов расы → ревью владельца → правки → утверждение → публикация в `packages/assets`. Первой делается одна раса целиком (14 юнитов) как эталон стиля.
+- **Процесс**: черновик ассетов расы → ревью владельца → правки → утверждение → публикация в `packages/assets`. Первой делается одна раса целиком (14 юнитов) как эталон стиля — **некроманты**.
 
 ### 10.2 Локализация
 
@@ -967,7 +978,7 @@ match /reports/{reportId}     { allow read, write: if false; }  // создаё�
 
 ### Этап 2 — Клиент MVP
 6. Expo-приложение (web + iOS + Android), i18n (en, ru), Auth с гостевым входом.
-7. Графика: эталонная раса целиком на утверждение (§10.1), затем вторая раса.
+7. Графика: эталонная раса (некроманты) целиком на утверждение (§10.1), затем вторая раса.
 8. Боевой экран на Skia (сетка, перемещение, атаки, крупные юниты).
 9. Замок (пресеты армии), профиль героя, распределение очков.
 10. Бой с ботом end-to-end на всех платформах.

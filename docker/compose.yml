@@ -1,0 +1,31 @@
+name: heroes-battles-verify
+
+services:
+  emulators:
+    build:
+      context: ..
+      dockerfile: docker/emulators.Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+      - "9099:9099"
+      - "9199:9199"
+
+  verify:
+    build:
+      context: ..
+      dockerfile: docker/verify.Dockerfile
+    depends_on:
+      emulators:
+        condition: service_healthy
+    environment:
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      FIREBASE_DATABASE_EMULATOR_HOST: emulators:9000
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+      FIREBASE_STORAGE_EMULATOR_HOST: emulators:9199
+      CI: "true"

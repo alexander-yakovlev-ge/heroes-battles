@@ -1,0 +1,10 @@
+rules_version = '2';
+
+// Этап 1: доступ закрыт полностью. Правила по §14 ТЗ появляются вместе с коллекциями на этапах 2–3.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
