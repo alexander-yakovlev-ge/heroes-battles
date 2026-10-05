@@ -16,3 +16,4 @@ export { movePositions, attackPositions, type Position } from './battle/movement
 export { candidateActions } from './ai/candidates.js'
 export { chooseBotAction, material, type BotDifficulty } from './ai/bot.js'
 export { createBotHero, createBotArmy } from './ai/army.js'
+export { simulateBattle, type SimResult } from './ai/simulate.js'

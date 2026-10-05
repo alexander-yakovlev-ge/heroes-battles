@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createBotArmy, createBotHero, createRng, maxWeight, armyWeight, validateArmy } from '../src/index.js'
-import { simulateBattle } from './simulate.js'
+import { createBotArmy, createBotHero, createRng, maxWeight, armyWeight, simulateBattle, validateArmy } from '../src/index.js'
 
 describe('боты (§9)', () => {
   it('армия бота валидна и близка к лимиту веса', () => {

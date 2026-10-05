@@ -1,19 +1,13 @@
-import {
-  applyAction,
-  chooseBotAction,
-  createBattle,
-  createBotArmy,
-  createBotHero,
-  createRng,
-  type BattleState,
-  type BotDifficulty,
-  type Mode,
-  type Participant,
-} from '../src/index.js'
+import { createBattle, applyAction, type Participant } from '../battle/engine.js'
+import { createRng } from '../rng.js'
+import type { BattleState, Mode, Team } from '../types.js'
+import { chooseBotAction, type BotDifficulty } from './bot.js'
+import { createBotArmy, createBotHero } from './army.js'
 
 export interface SimResult {
   state: BattleState
   actions: number
+  participants: Participant[]
 }
 
 /** Полный бой бот против бота; используется в тестах и для оценки баланса */
@@ -21,7 +15,7 @@ export function simulateBattle(
   seed: number,
   mode: Mode,
   levels: number[],
-  difficulty: Record<'red' | 'blue', BotDifficulty> = { red: 'normal', blue: 'normal' },
+  difficulty: Record<Team, BotDifficulty> = { red: 'normal', blue: 'normal' },
 ): SimResult {
   const rng = createRng(seed)
   const perTeam = mode === '1v1' ? 1 : mode === '2v2' ? 2 : 3
@@ -35,11 +29,10 @@ export function simulateBattle(
   let actions = 0
   while (state.status === 'active') {
     const active = state.units.find((u) => u.id === state.activeUnitId)!
-    const team = active.team
-    const action = chooseBotAction(state, active.owner, difficulty[team], rng)
+    const action = chooseBotAction(state, active.owner, difficulty[active.team], rng)
     if (!action) throw new Error('bot returned no action')
     state = applyAction(state, action, active.owner, rng).state
     if (++actions > 5000) throw new Error('battle did not finish')
   }
-  return { state, actions }
+  return { state, actions, participants }
 }
