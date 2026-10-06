@@ -7,6 +7,7 @@ import { Button, Row } from '../../components/ui'
 import { colors, radius, space } from '../../theme'
 import { BattleBoard, type Highlights } from './BattleBoard'
 import { previewBattle, unitAt, type BotPreparation } from './controller'
+import type { Projection } from './projection'
 
 const MAX_STACKS = MODE_CONFIG['1v1'].stacksPerHero
 const NO_STEPS: never[] = []
@@ -21,21 +22,21 @@ export function Preparation({
   deployed,
   onChange,
   onStart,
-  cellFor,
+  projFor,
   enemyName,
 }: {
   prep: BotPreparation
   deployed: ArmySlot[]
   onChange: (army: ArmySlot[]) => void
   onStart: () => void
-  cellFor: (width: number, height: number) => number
+  projFor: (width: number, height: number) => Projection
   enemyName: string
 }) {
   const { t } = useTranslation()
   const preview = useMemo(() => previewBattle(prep, deployed), [prep, deployed])
   const [splitting, setSplitting] = useState<{ index: number; count: number } | null>(null)
   const [inspect, setInspect] = useState<string | null>(null)
-  const cell = cellFor(preview.grid.width, preview.grid.height)
+  const proj = projFor(preview.grid.width, preview.grid.height)
 
   const highlights: Highlights = useMemo(
     () => ({ moves: new Set(), targets: new Set(), spellCells: new Set(), attackCells: new Set(), activeId: inspect }),
@@ -58,7 +59,7 @@ export function Preparation({
           prevState={preview}
           steps={NO_STEPS}
           playhead={PLAYHEAD}
-          cell={cell}
+          proj={proj}
           highlights={highlights}
           onTap={(x, y) => setInspect(unitAt(preview, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)}
         />

@@ -13,6 +13,7 @@ import {
   createRng,
   getSpell,
   getUnit,
+  movePositions,
   type Action,
   type ArmySlot,
   type BattleEvent,
@@ -290,6 +291,42 @@ export function resolveTap(battle: BotBattle, opts: PlayerOptions, tap: { x: num
 
 export function applyPlayerAction(battle: BotBattle, action: Action): Step {
   return applyAction(battle.state, action, battle.playerUid, battle.rng)
+}
+
+/**
+ * Путь перемещения по клеткам для анимации: восстанавливается по карте достижимости
+ * (шаги от старта, как ищет движок), из конца к началу по соседям с шагом на 1 меньше.
+ * Летающие и телепортирующиеся двигаются по прямой — для них путь из двух точек.
+ */
+export function movePath(state: BattleState, unitId: string, from: Cell, to: Cell): Cell[] {
+  const u = state.units.find((x) => x.id === unitId)
+  if (!u) return [from, to]
+  const reach = movePositions(state, { ...u, x: from.x, y: from.y })
+  const steps = (c: Cell) => reach.get(c.y * 1000 + c.x)?.steps
+  const path: Cell[] = [to]
+  let cur = to
+  for (let guard = 0; guard < 64; guard++) {
+    const n = steps(cur)
+    if (n === undefined || n === 0) break
+    let next: Cell | null = null
+    let best = Infinity
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        const c = { x: cur.x + dx, y: cur.y + dy }
+        if (steps(c) !== n - 1) continue
+        const d = Math.hypot(c.x - from.x, c.y - from.y)
+        if (d < best) {
+          best = d
+          next = c
+        }
+      }
+    if (!next) break
+    path.push(next)
+    cur = next
+  }
+  if (cur.x !== from.x || cur.y !== from.y) return [from, to]
+  return path.reverse()
 }
 
 /** Один ход бота (юнитом или героем); null — сейчас не ход бота */

@@ -10,6 +10,7 @@ import {
   defaultAttack,
   isPlayerHeroTurn,
   isPlayerTurn,
+  movePath,
   playerOptions,
   prepareBotBattle,
   previewBattle,
@@ -19,7 +20,8 @@ import {
   type BotBattle,
 } from '../src/features/battle/controller'
 import { addUnit, maxCountAt, validate, weightOf } from '../src/features/castle/army'
-import { buildSteps, lastHitIndex, playheadAt, totalDuration, unitOpacity, visualPosition } from '../src/features/battle/animation'
+import { buildSteps, lastHitIndex, playheadAt, poseOf, totalDuration, unitOpacity, visualPosition } from '../src/features/battle/animation'
+import { fitCell, makeProjection } from '../src/features/battle/projection'
 
 const hero: Hero = createHero('player', 'necro', 5)
 const noMode = NO_MODE
@@ -197,31 +199,107 @@ describe('подготовка к бою', () => {
 })
 
 describe('анимации', () => {
-  it('перемещение, удар, урон и гибель превращаются в шаги по порядку', () => {
-    const steps = buildSteps([
-      { type: 'move', unitId: 'a', from: { x: 0, y: 0 }, to: { x: 3, y: 0 } },
-      { type: 'damage', sourceId: 'a', targetId: 'b', damage: 10, kills: 2, kind: 'melee' },
-      { type: 'damage', sourceId: 'b', targetId: 'a', damage: 4, kills: 0, kind: 'retaliation' },
-      { type: 'death', unitId: 'b' },
-    ])
+  it('перемещение по пути, удар, урон и гибель превращаются в шаги по порядку', () => {
+    const path = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 1 }, { x: 3, y: 0 }]
+    const steps = buildSteps(
+      [
+        { type: 'move', unitId: 'a', from: { x: 0, y: 0 }, to: { x: 3, y: 0 } },
+        { type: 'damage', sourceId: 'a', targetId: 'b', damage: 10, kills: 2, kind: 'melee' },
+        { type: 'damage', sourceId: 'b', targetId: 'a', damage: 4, kills: 0, kind: 'retaliation' },
+        { type: 'death', unitId: 'b' },
+      ],
+      { pathOf: () => path },
+    )
     expect(steps.map((s) => s.kind)).toEqual(['move', 'strike', 'hits', 'strike', 'hits', 'death'])
+    expect(steps[0]).toMatchObject({ kind: 'move', path, flying: false })
     expect(lastHitIndex('b', steps)).toBe(2)
     expect(lastHitIndex('a', steps)).toBe(4)
     expect(playheadAt(steps, totalDuration(steps) + 1).index).toBe(steps.length)
   })
 
-  it('видимая позиция идёт от начала пути к концу, гибель — затухание', () => {
-    const steps = buildSteps([
-      { type: 'move', unitId: 'a', from: { x: 0, y: 0 }, to: { x: 4, y: 2 } },
-      { type: 'death', unitId: 'a' },
-    ])
-    const u = { id: 'a', x: 4, y: 2, count: 0 } as never
+  it('видимая позиция идёт по клеткам пути; гибель — падение и затухание', () => {
+    const path = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }]
+    const steps = buildSteps(
+      [
+        { type: 'move', unitId: 'a', from: { x: 0, y: 0 }, to: { x: 2, y: 1 } },
+        { type: 'death', unitId: 'a' },
+      ],
+      { pathOf: () => path },
+    )
+    const u = { id: 'a', x: 2, y: 1, count: 0, team: 'red' } as never
     expect(visualPosition(u, steps, { index: 0, t: 0 })).toEqual({ x: 0, y: 0 })
-    expect(visualPosition(u, steps, { index: 0, t: 1 })).toEqual({ x: 4, y: 2 })
-    expect(visualPosition(u, steps, { index: 2, t: 0 })).toEqual({ x: 4, y: 2 })
+    expect(visualPosition(u, steps, { index: 0, t: 0.5 })).toEqual({ x: 1, y: 1 })
+    expect(visualPosition(u, steps, { index: 0, t: 1 })).toEqual({ x: 2, y: 1 })
+    expect(visualPosition(u, steps, { index: 2, t: 0 })).toEqual({ x: 2, y: 1 })
     expect(unitOpacity(u, steps, { index: 0, t: 0.5 })).toBe(1)
-    expect(unitOpacity(u, steps, { index: 1, t: 0.5 })).toBeCloseTo(0.5)
+    expect(unitOpacity(u, steps, { index: 1, t: 0.2 })).toBe(1)
+    expect(unitOpacity(u, steps, { index: 1, t: 1 })).toBeCloseTo(0)
     expect(unitOpacity(u, steps, { index: 2, t: 0 })).toBe(0)
+    const falling = poseOf(u, steps, { index: 1, t: 0.6 }, 0, false, () => undefined)
+    expect(Math.abs(falling.rot)).toBeGreaterThan(1)
+  })
+
+  it('удар: замах назад, рывок к цели, возврат; цель получает отдачу и вспышку', () => {
+    const steps = buildSteps([{ type: 'damage', sourceId: 'a', targetId: 'b', damage: 5, kills: 0, kind: 'melee' }])
+    const a = { id: 'a', x: 2, y: 2, count: 5, team: 'red' } as never
+    const b = { id: 'b', x: 3, y: 2, count: 5, team: 'blue' } as never
+    const pos = (id: string) => (id === 'a' ? { x: 2, y: 2 } : { x: 3, y: 2 })
+    expect(poseOf(a, steps, { index: 0, t: 0.3 }, 0, false, pos).x).toBeLessThan(2)
+    expect(poseOf(a, steps, { index: 0, t: 0.55 }, 0, false, pos).x).toBeGreaterThan(2.3)
+    expect(poseOf(a, steps, { index: 0, t: 1 }, 0, false, pos).x).toBeCloseTo(2)
+    const hit = poseOf(b, steps, { index: 1, t: 0.2 }, 0, false, pos)
+    expect(hit.x).toBeGreaterThan(3)
+    expect(hit.flash).toBeGreaterThan(0.5)
+    expect(hit.facing).toBe(-1)
+  })
+})
+
+describe('наклонное поле', () => {
+  it('нажатие в центр клетки распознаётся как та же клетка', () => {
+    const proj = makeProjection(12, 8, fitCell(12, 8, 900, 560))
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 12; x++) {
+        const p = proj.project(x + 0.5, y + 0.5)
+        const back = proj.unproject(p.x, p.y)!
+        expect(Math.floor(back.x)).toBe(x)
+        expect(Math.floor(back.v)).toBe(y)
+      }
+    expect(proj.unproject(-5, proj.height - 2)).toBeNull()
+    expect(proj.unproject(proj.width / 2, 1)).toBeNull()
+  })
+
+  it('дальние ряды уже и ниже ближних; поле помещается в отведённое место', () => {
+    const cell = fitCell(12, 8, 900, 560)
+    const proj = makeProjection(12, 8, cell)
+    expect(proj.width).toBeLessThanOrEqual(900)
+    expect(proj.height).toBeLessThanOrEqual(560)
+    const backRow = proj.project(1, 0).x - proj.project(0, 0).x
+    const frontRow = proj.project(1, 8).x - proj.project(0, 8).x
+    expect(backRow).toBeLessThan(frontRow)
+    const backH = proj.project(0, 1).y - proj.project(0, 0).y
+    const frontH = proj.project(0, 8).y - proj.project(0, 7).y
+    expect(backH).toBeLessThan(frontH)
+  })
+})
+
+describe('путь перемещения', () => {
+  it('наземный юнит идёт по соседним клеткам в обход препятствий', () => {
+    const { battle } = start('easy', 7)
+    untilPlayer(battle)
+    const u = activeUnit(battle.state)!
+    const opts = playerOptions(battle)
+    for (const action of opts.moves.values()) {
+      if (action.type !== 'move') continue
+      const path = movePath(battle.state, u.id, { x: u.x, y: u.y }, action.to)
+      expect(path[0]).toEqual({ x: u.x, y: u.y })
+      expect(path[path.length - 1]).toEqual(action.to)
+      if (getUnit(u.templateId).isFlying) continue
+      const obstacles = new Set(battle.state.grid.obstacles.map(([x, y]) => `${x},${y}`))
+      for (let i = 1; i < path.length; i++) {
+        expect(Math.max(Math.abs(path[i]!.x - path[i - 1]!.x), Math.abs(path[i]!.y - path[i - 1]!.y))).toBe(1)
+        expect(obstacles.has(`${path[i]!.x},${path[i]!.y}`)).toBe(false)
+      }
+    }
   })
 })
 

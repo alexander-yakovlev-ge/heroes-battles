@@ -26,7 +26,6 @@ interface BattleHook {
   attacks: Record<string, string[]>
   status: string
   playerTurn: boolean
-  cell: number
   moves: string[]
   targets: string[]
   activeId: string | null
@@ -62,10 +61,13 @@ export async function waitPlayerHeroTurn(page: Page) {
   throw new Error('no hero turn')
 }
 
-/** Клик по клетке поля боя */
+/** Клик по центру клетки наклонного поля (координаты на экране считает проекция клиента) */
 export async function clickCell(page: Page, x: number, y: number) {
-  const b = await battle(page)
+  const p = await page.evaluate(
+    ([cx, cy]) => (globalThis as { __hbBattle?: { screenOf: (x: number, y: number) => { x: number; y: number } } }).__hbBattle?.screenOf(cx!, cy!),
+    [x, y],
+  )
   const box = await id(page, 'battle-board').boundingBox()
-  if (!b || !box) throw new Error('battle board not ready')
-  await page.mouse.click(box.x + (x + 0.5) * b.cell, box.y + (y + 0.5) * b.cell)
+  if (!p || !box) throw new Error('battle board not ready')
+  await page.mouse.click(box.x + p.x, box.y + p.y)
 }

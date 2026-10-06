@@ -32,6 +32,7 @@ import {
   botStep,
   isPlayerHeroTurn,
   isPlayerTurn,
+  movePath,
   playerOptions,
   prepareBotBattle,
   resolveTap,
@@ -45,6 +46,7 @@ import { forecastText } from './forecastText'
 import { HelpModal } from './HelpModal'
 import { formatEvent, type LogLine } from './log'
 import { Preparation } from './Preparation'
+import { fitCell, makeProjection, type Projection } from './projection'
 import { TurnQueue } from './TurnQueue'
 
 const BOT_DELAY_MS = 280
@@ -89,7 +91,7 @@ export default function BattleScreen() {
   const [confirmSurrender, setConfirmSurrender] = useState(false)
   const [help, setHelp] = useState(false)
   const logId = useRef(0)
-  const cellRef = useRef(0)
+  const projRef = useRef<Projection | null>(null)
 
   const heroNames = useMemo(() => ({ [hero?.uid ?? '']: playerName || t('battle.you'), [BOT_UID]: t('battle.enemy') }), [hero?.uid, playerName, t])
 
@@ -113,7 +115,14 @@ export default function BattleScreen() {
       const start = performance.now()
       setNow(start)
       const positions = new Map(prev.units.map((u) => [u.id, { x: u.x, y: u.y }]))
-      setView({ state: step.state, prev, steps: buildSteps(step.events, positions), start })
+      const template = (id: string) => getUnit(prev.units.find((u) => u.id === id)!.templateId)
+      const steps = buildSteps(step.events, {
+        positions,
+        pathOf: (id, from, to) => movePath(prev, id, from, to),
+        // Летающие и телепортирующиеся перемещаются по прямой
+        isFlying: (id) => template(id).isFlying || template(id).abilities.includes('teleport'),
+      })
+      setView({ state: step.state, prev, steps, start })
     },
     [pushLog],
   )
@@ -273,7 +282,8 @@ export default function BattleScreen() {
       attacks: options ? Object.fromEntries([...options.attacks].map(([id, list]) => [id, list.map((a) => `${a.from.x},${a.from.y}`)])) : {},
       shoots: options ? [...options.shoots.keys()] : [],
       heroStrikes: options ? [...options.heroStrikes.keys()] : [],
-      cell: cellRef.current,
+      /** Центр клетки на экране относительно поля — для кликов в e2e */
+      screenOf: (x: number, y: number) => projRef.current?.project(x + 0.5, y + 0.5),
       moves: options ? [...options.moves.keys()] : [],
       units: state.units.map((u) => ({ id: u.id, team: u.team, x: u.x, y: u.y, count: u.count })),
       activeId: state.activeUnitId,
@@ -281,18 +291,18 @@ export default function BattleScreen() {
     }
   })
 
-  // Размер клетки: поле во всю ширину, но не выше ~60% экрана
-  const cellFor = (w: number, h: number) => {
+  // Поле во всю ширину, но не выше ~62% экрана
+  const projFor = (w: number, h: number) => {
     const availW = Math.min(win.width - space.md * 2, 1100)
-    const availH = (win.height - insets.top - insets.bottom) * 0.6
-    return Math.max(24, Math.floor(Math.min(availW / w, availH / h)))
+    const availH = (win.height - insets.top - insets.bottom) * 0.62
+    return makeProjection(w, h, fitCell(w, h, availW, availH))
   }
 
   if (!hero || !preset) return <Loading />
   if (prep) {
     return (
       <View style={[s.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.sm }]}>
-        <Preparation prep={prep} deployed={deployed} onChange={setDeployed} onStart={beginBattle} cellFor={cellFor} enemyName={t('battle.enemy')} />
+        <Preparation prep={prep} deployed={deployed} onChange={setDeployed} onStart={beginBattle} projFor={projFor} enemyName={t('battle.enemy')} />
       </View>
     )
   }
@@ -301,8 +311,8 @@ export default function BattleScreen() {
   const playhead = animating ? playheadAt(view.steps, now - view.start) : { index: view.steps.length, t: 0 }
   const myHero = state.heroes[hero.uid]!
   const active = activeUnit(state)
-  const cell = cellFor(state.grid.width, state.grid.height)
-  cellRef.current = cell
+  const proj = projFor(state.grid.width, state.grid.height)
+  projRef.current = proj
   const inspected = inspect ? state.units.find((u) => u.id === inspect && u.count > 0) : undefined
   const finished = state.status === 'finished' && !animating
   const won = state.winner === 'red'
@@ -378,7 +388,7 @@ export default function BattleScreen() {
       <TurnQueue state={state} heroRaces={heroRaces} />
 
       <View style={s.boardWrap}>
-        <BattleBoard state={state} prevState={view.prev} steps={view.steps} playhead={playhead} cell={cell} highlights={highlights} onTap={onTap} />
+        <BattleBoard state={state} prevState={view.prev} steps={view.steps} playhead={playhead} proj={proj} highlights={highlights} onTap={onTap} />
       </View>
 
       <View style={s.info}>{hint}</View>

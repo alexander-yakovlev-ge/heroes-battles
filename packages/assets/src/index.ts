@@ -32,3 +32,17 @@ export function unitIconSvg(unitId: string): string {
   const art = getUnitArt(unitId)
   return art.svg.replace(/viewBox="[^"]*"/, `viewBox="${art.iconViewBox}"`)
 }
+
+export type Projectile = 'arrow' | 'orb' | 'rock'
+
+/** Магические стрелки — светящийся снаряд; метатели — камень/топор; остальные — стрела */
+const ORB = /lich|mage|druid|monk|witch|caster|titan|seraph|genie|matriarch|succubus|efreet|shaman|brimstone|gremlin|medusa/
+const THROWN = /hurler|thrower|cyclops|spearthrower|slinger|juggernaut|ballista/
+
+/** Снаряд стрелка для анимации выстрела */
+export function projectileOf(unitId: string): Projectile {
+  const slug = unitId.slice(unitId.indexOf('_') + 1)
+  if (ORB.test(slug)) return 'orb'
+  if (THROWN.test(slug)) return 'rock'
+  return 'arrow'
+}
