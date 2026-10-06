@@ -7,8 +7,11 @@ import {
   MAX_RACE_SKILL,
   RACES,
   STATS,
+  HERO_INITIATIVE,
   expNeeded,
   getAvailableSpells,
+  heroStrikeDamage,
+  lightningBoltDamage,
   maxWeight,
 } from '@hb/game-core'
 import { RACE_PALETTES } from '@hb/assets'
@@ -43,6 +46,21 @@ export default function Profile() {
 
   const spells = getAvailableSpells(hero.level, hero.raceSkills)
 
+  /** Что даёт стат при текущих значениях героя */
+  const statHint = (stat: (typeof STATS)[number]) => {
+    const value = hero.stats[stat]
+    switch (stat) {
+      case 'attack':
+        return t('profile.hint_attack', { value, strike: heroStrikeDamage(hero.level, value) })
+      case 'defense':
+        return t('profile.hint_defense', { value })
+      case 'power':
+        return t('profile.hint_power', { bolt: lightningBoltDamage(value) })
+      case 'knowledge':
+        return t('profile.hint_knowledge', { mana: value * MANA_PER_KNOWLEDGE })
+    }
+  }
+
   return (
     <Screen title={t('profile.title')} back>
       <Card>
@@ -68,21 +86,29 @@ export default function Profile() {
           </P>
         </Row>
         {STATS.map((stat) => (
-          <Row key={stat} style={s.line}>
-            <Text style={s.label}>{t(`stat.${stat}`)}</Text>
-            <Text style={s.value} testID={`stat-${stat}`}>
-              {hero.stats[stat]}
-            </Text>
-            <Button
-              small
-              title="+"
-              disabled={hero.pendingStatPoints <= 0}
-              loading={busy === stat}
-              onPress={() => allocate({ kind: 'stat', stat })}
-              testID={`add-stat-${stat}`}
-            />
-          </Row>
+          <View key={stat}>
+            <Row style={s.line}>
+              <Text style={s.label}>{t(`stat.${stat}`)}</Text>
+              <Text style={s.value} testID={`stat-${stat}`}>
+                {hero.stats[stat]}
+              </Text>
+              <Button
+                small
+                title="+"
+                disabled={hero.pendingStatPoints <= 0}
+                loading={busy === stat}
+                onPress={() => allocate({ kind: 'stat', stat })}
+                testID={`add-stat-${stat}`}
+              />
+            </Row>
+            <P dim style={s.small} testID={`hint-${stat}`}>
+              {statHint(stat)}
+            </P>
+          </View>
         ))}
+        <P dim style={[s.small, s.heroLine]} testID="hero-in-battle">
+          {t('profile.heroInBattle', { init: HERO_INITIATIVE, strike: heroStrikeDamage(hero.level, hero.stats.attack), level: hero.level })}
+        </P>
       </Card>
 
       <Card>
@@ -136,4 +162,5 @@ const s = StyleSheet.create({
   dim: { color: colors.textDim },
   dot: { width: 10, height: 10, borderRadius: 5 },
   small: { fontSize: 13 },
+  heroLine: { marginTop: space.sm, color: colors.gold },
 })

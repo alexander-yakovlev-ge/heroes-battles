@@ -81,6 +81,9 @@ export const UnitCard = memo(function UnitCard({
               </Text>
             ))}
           </View>
+          <Text style={s.ability} testID={`role-hint-${unit.id}`}>
+            {t(`unitInfo.roleHint_${unit.role}`)}
+          </Text>
           {unit.abilities.map((a) => (
             <Text key={a} style={s.ability}>
               <Text style={s.abilityName}>{t(`ability.${a}`)}</Text> — {t(`abilityDesc.${a}`)}

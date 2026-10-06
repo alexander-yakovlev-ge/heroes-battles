@@ -1,5 +1,6 @@
 import {
   RACES,
+  activeActor,
   applyAction,
   battleLevelOf,
   prepareArmy,
@@ -103,10 +104,13 @@ export function activeUnit(state: BattleState): UnitState | undefined {
   return state.activeUnitId ? state.units.find((u) => u.id === state.activeUnitId) : undefined
 }
 
+/** Сейчас ход игрока: его юнита или его героя (§5.3) */
 export function isPlayerTurn(battle: BotBattle): boolean {
-  const u = activeUnit(battle.state)
-  return battle.state.status === 'active' && u?.owner === battle.playerUid
+  return battle.state.status === 'active' && activeActor(battle.state) === battle.playerUid
 }
+
+/** Сейчас ход героя игрока */
+export const isPlayerHeroTurn = (battle: BotBattle) => battle.state.status === 'active' && battle.state.activeHeroUid === battle.playerUid
 
 /** Живой юнит, занимающий клетку (крупные — 2×2) */
 export function unitAt(state: BattleState, cell: Cell): UnitState | undefined {
@@ -132,6 +136,9 @@ export interface PlayerOptions {
   canWait: boolean
   defend: Action | null
   wait: Action | null
+  /** Ход героя: id вражеского юнита → удар героя */
+  heroStrikes: Map<string, Action>
+  heroPass: Action | null
 }
 
 export function playerOptions(battle: BotBattle): PlayerOptions {
@@ -144,9 +151,15 @@ export function playerOptions(battle: BotBattle): PlayerOptions {
     canWait: false,
     defend: null,
     wait: null,
+    heroStrikes: new Map(),
+    heroPass: null,
   }
   if (!isPlayerTurn(battle)) return opts
-  const { unit, casts } = candidateActions(battle.state, battle.playerUid)
+  const { unit, casts, hero } = candidateActions(battle.state, battle.playerUid)
+  for (const a of hero) {
+    if (a.type === 'hero_strike') opts.heroStrikes.set(a.targetId, a)
+    else if (a.type === 'hero_pass') opts.heroPass = a
+  }
   for (const a of unit) {
     switch (a.type) {
       case 'move':
@@ -186,9 +199,20 @@ export type AttackOption = Extract<Action, { type: 'attack' }>
 
 export type TapResult =
   | { kind: 'action'; action: Action }
-  /** У цели несколько клеток атаки — игрок выбирает, откуда бить */
-  | { kind: 'chooseAttack'; targetId: string }
+  /** Нажатие на врага — прицел: показать прогноз и клетки атаки, действие — следующим нажатием */
+  | { kind: 'aim'; targetId: string }
   | { kind: 'none' }
+
+export interface TapMode {
+  /** Выбранное героем заклинание */
+  spell: SpellId | null
+  /** Герой выбрал удар */
+  heroStrike: boolean
+  /** Цель, на которую уже прицелились */
+  aim: string | null
+}
+
+export const NO_MODE: TapMode = { spell: null, heroStrike: false, aim: null }
 
 /** Клетка атаки по умолчанию: текущая позиция, если с неё можно бить, иначе ближайшая к юниту */
 export function defaultAttack(battle: BotBattle, list: readonly AttackOption[]): AttackOption {
@@ -216,17 +240,21 @@ export function attackCells(battle: BotBattle, opts: PlayerOptions, targetId: st
   return cells
 }
 
+/** Действие по уже выбранной цели: удар героя, выстрел или удар с клетки по умолчанию */
+export function aimedAction(battle: BotBattle, opts: PlayerOptions, targetId: string, heroStrike: boolean): Action | null {
+  if (heroStrike) return opts.heroStrikes.get(targetId) ?? null
+  const shoot = opts.shoots.get(targetId)
+  if (shoot) return shoot
+  const attacks = opts.attacks.get(targetId)
+  return attacks && attacks.length > 0 ? defaultAttack(battle, attacks) : null
+}
+
 /**
- * Разбор нажатия на поле (tap — в координатах клеток). Ближний бой: если подойти к цели можно
- * с нескольких клеток, первое нажатие выбирает цель, второе — клетку атаки (или цель ещё раз —
- * удар с клетки по умолчанию). Нажатие мимо отменяет выбор.
+ * Разбор нажатия на поле (tap — в координатах клеток). Атака — в два нажатия: первое на врага
+ * прицеливается (прогноз урона, клетки атаки), второе — по той же цели (выстрел, удар героя или
+ * удар с ближайшей клетки) или по подсвеченной клетке (удар с неё). Нажатие мимо снимает прицел.
  */
-export function resolveTap(
-  battle: BotBattle,
-  opts: PlayerOptions,
-  tap: { x: number; y: number },
-  mode: { spell: SpellId | null; attackTarget: string | null },
-): TapResult {
+export function resolveTap(battle: BotBattle, opts: PlayerOptions, tap: { x: number; y: number }, mode: TapMode): TapResult {
   const cell = { x: Math.floor(tap.x), y: Math.floor(tap.y) }
   const target = unitAt(battle.state, cell)
   const action = (a: Action | null | undefined): TapResult => (a ? { kind: 'action', action: a } : { kind: 'none' })
@@ -240,20 +268,20 @@ export function resolveTap(
     return action(targets.get(cellKey(anchor)))
   }
 
-  if (mode.attackTarget) {
-    const list = opts.attacks.get(mode.attackTarget) ?? []
-    if (target?.id === mode.attackTarget && list.length > 0) return action(defaultAttack(battle, list))
-    const chosen = attackAtCell(battle, list, cell)
+  if (mode.heroStrike) {
+    if (!target || !opts.heroStrikes.has(target.id)) return { kind: 'none' }
+    return mode.aim === target.id ? action(opts.heroStrikes.get(target.id)) : { kind: 'aim', targetId: target.id }
+  }
+
+  if (mode.aim) {
+    if (target?.id === mode.aim) return action(aimedAction(battle, opts, mode.aim, false))
+    const chosen = attackAtCell(battle, opts.attacks.get(mode.aim) ?? [], cell)
     if (chosen) return action(chosen)
-    // Нажатие мимо клеток атаки — обычная обработка (выбор снимается)
+    // Нажатие мимо — обычная обработка (прицел снимается)
   }
 
   if (target) {
-    const shoot = opts.shoots.get(target.id)
-    if (shoot) return action(shoot)
-    const attacks = opts.attacks.get(target.id)
-    if (attacks && attacks.length === 1) return action(attacks[0])
-    if (attacks && attacks.length > 1) return { kind: 'chooseAttack', targetId: target.id }
+    if (opts.shoots.has(target.id) || opts.attacks.has(target.id)) return { kind: 'aim', targetId: target.id }
     return action(opts.abilities.get(target.id))
   }
 
@@ -261,16 +289,15 @@ export function resolveTap(
 }
 
 export function applyPlayerAction(battle: BotBattle, action: Action): Step {
-  const uid = action.type === 'cast' || action.type === 'surrender' ? action.heroUid : battle.playerUid
-  return applyAction(battle.state, action, uid, battle.rng)
+  return applyAction(battle.state, action, battle.playerUid, battle.rng)
 }
 
-/** Один ход бота; null — сейчас не ход бота */
+/** Один ход бота (юнитом или героем); null — сейчас не ход бота */
 export function botStep(battle: BotBattle): Step | null {
   const state = battle.state
-  const u = activeUnit(state)
-  if (state.status !== 'active' || !u || u.owner === battle.playerUid) return null
-  const action = chooseBotAction(state, u.owner, battle.difficulty, battle.rng)
+  const actor = activeActor(state)
+  if (state.status !== 'active' || !actor || actor === battle.playerUid) return null
+  const action = chooseBotAction(state, actor, battle.difficulty, battle.rng)
   if (!action) throw new Error('Bot returned no action')
-  return applyAction(state, action, u.owner, battle.rng)
+  return applyAction(state, action, actor, battle.rng)
 }

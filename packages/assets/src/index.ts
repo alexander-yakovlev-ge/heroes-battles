@@ -5,6 +5,7 @@ import type { UnitArt } from './types.js'
 
 export { RACE_PALETTES, type RacePalette } from './palette.js'
 export type { UnitArt } from './types.js'
+export { heroIconSvg } from './hero.js'
 
 /**
  * Нарисованные спрайты по unitId (§10.1). Раса добавляется сюда после утверждения владельцем;

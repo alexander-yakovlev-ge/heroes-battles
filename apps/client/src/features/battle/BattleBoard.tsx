@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native'
-import { Canvas, Circle, Group, Image, Rect, RoundedRect, type SkImage } from '@shopify/react-native-skia'
+import { Canvas, Circle, Group, Image, Path, Rect, RoundedRect, type SkImage } from '@shopify/react-native-skia'
 import { getUnit, type BattleState, type UnitState } from '@hb/game-core'
 import { colors } from '../../theme'
 import { lastHitIndex, unitOpacity, visualPosition, type AnimStep, type Playhead } from './animation'
@@ -163,6 +163,13 @@ export const BattleBoard = memo(function BattleBoard({
               {isActive || isTarget ? (
                 <RoundedRect x={x + 2} y={y + 2} width={s - 4} height={s - 4} r={6} color={isActive ? colors.gold : colors.red} style="stroke" strokeWidth={2} />
               ) : null}
+              {u.defending && u.count > 0 ? (
+                <Path
+                  path={`M ${x + 5} ${y + 5} h ${s * 0.16} v ${s * 0.1} q 0 ${s * 0.08} ${-s * 0.08} ${s * 0.12} q ${-s * 0.08} ${-s * 0.04} ${-s * 0.08} ${-s * 0.12} z`}
+                  color="#9ec3ff"
+                  style="fill"
+                />
+              ) : null}
               {sprite ? (
                 <Group transform={u.team === 'blue' ? [{ translateX: x + s }, { scaleX: -1 }, { translateX: -x }] : []}>
                   <Image image={sprite} x={x} y={y} width={s} height={s} fit="fill" />
@@ -190,7 +197,7 @@ export const BattleBoard = memo(function BattleBoard({
               cx={(current.center.x + 0.5) * cell}
               cy={(current.center.y + 0.5) * cell}
               r={cell * current.radius * (0.4 + 0.6 * playhead.t)}
-              color={`rgba(170,110,255,${0.55 * (1 - playhead.t)})`}
+              color={current.color === 'hero' ? `rgba(240,200,90,${0.7 * (1 - playhead.t)})` : `rgba(170,110,255,${0.55 * (1 - playhead.t)})`}
             />
           )
         ) : null}

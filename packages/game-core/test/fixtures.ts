@@ -3,6 +3,7 @@ import {
   balanceHero,
   createHero,
   getUnit,
+  heroQueueId,
   type BattleState,
   type Hero,
   type RaceId,
@@ -31,7 +32,15 @@ export function plainHero(uid: string, race: RaceId = 'knight', level = 1): Hero
  */
 export function scenario(
   units: UnitSpec[],
-  opts: { width?: number; height?: number; obstacles?: [number, number][]; heroes?: Hero[]; level?: number } = {},
+  opts: {
+    width?: number
+    height?: number
+    obstacles?: [number, number][]
+    heroes?: Hero[]
+    level?: number
+    /** Начать с хода этого героя (он первый в очереди, затем юниты) */
+    heroTurn?: string
+  } = {},
 ): BattleState {
   const level = opts.level ?? 1
   const heroes = opts.heroes ?? [plainHero('red', 'knight', level), plainHero('blue', 'necro', level)]
@@ -46,6 +55,7 @@ export function scenario(
     units: [],
     queue: [],
     activeUnitId: null,
+    activeHeroUid: null,
     round: 1,
     seq: 0,
     timeouts: {},
@@ -84,6 +94,11 @@ export function scenario(
   })
   state.queue = state.units.map((u) => u.id)
   state.activeUnitId = state.queue[0] ?? null
+  if (opts.heroTurn) {
+    state.queue.unshift(heroQueueId(opts.heroTurn))
+    state.activeUnitId = null
+    state.activeHeroUid = opts.heroTurn
+  }
   return state
 }
 

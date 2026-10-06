@@ -1,4 +1,4 @@
-import { createBattle, applyAction, type Participant } from '../battle/engine.js'
+import { activeActor, createBattle, applyAction, type Participant } from '../battle/engine.js'
 import { createRng } from '../rng.js'
 import type { BattleState, Mode, RaceId, Team } from '../types.js'
 import { chooseBotAction, type BotDifficulty } from './bot.js'
@@ -32,10 +32,10 @@ export function simulateBattle(
   let { state } = createBattle({ mode, participants }, rng)
   let actions = 0
   while (state.status === 'active') {
-    const active = state.units.find((u) => u.id === state.activeUnitId)!
-    const action = chooseBotAction(state, active.owner, difficulty[active.team], rng)
+    const actor = activeActor(state)!
+    const action = chooseBotAction(state, actor, difficulty[state.heroes[actor]!.team], rng)
     if (!action) throw new Error('bot returned no action')
-    state = applyAction(state, action, active.owner, rng).state
+    state = applyAction(state, action, actor, rng).state
     if (++actions > 5000) throw new Error('battle did not finish')
   }
   return { state, actions, participants }

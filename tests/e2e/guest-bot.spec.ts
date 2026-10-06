@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { battle, clickCell, guestWithHero, id, waitPlayerTurn } from './helpers'
+import { battle, clickCell, guestWithHero, id, waitPlayerTurn, waitPlayerUnitTurn } from './helpers'
 
 test('гость → армия в Замке → бой с ботом: ход по клику, сдача, возврат в меню', async ({ page }) => {
   await guestWithHero(page, 'GuestE2E')
@@ -27,7 +27,7 @@ test('гость → армия в Замке → бой с ботом: ход �
   expect((await battle(page))!.units.filter((u) => u.team === 'red')).toHaveLength(3)
 
   // Ход: клик по доступной клетке перемещения
-  await waitPlayerTurn(page)
+  await waitPlayerUnitTurn(page)
   const before = (await battle(page))!
   const active = before.units.find((u) => u.id === before.activeId)!
   expect(before.moves.length).toBeGreaterThan(0)
@@ -41,7 +41,7 @@ test('гость → армия в Замке → бой с ботом: ход �
     .toBe(`${mx},${my}`)
 
   // Защита следующим юнитом через панель действий
-  await waitPlayerTurn(page)
+  await waitPlayerUnitTurn(page)
   await id(page, 'action-defend').click()
   await expect(id(page, 'battle-log')).toContainText('defends')
 

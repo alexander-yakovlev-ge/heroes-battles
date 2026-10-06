@@ -1,5 +1,10 @@
 import {
   BASE_STAT_VALUE,
+  HERO_INITIATIVE,
+  HERO_QUEUE_PREFIX,
+  HERO_STRIKE_BASE,
+  HERO_STRIKE_PER_ATTACK,
+  HERO_STRIKE_PER_LEVEL,
   MANA_PER_KNOWLEDGE,
   MAX_LEVEL,
   MAX_RACE_SKILL,
@@ -116,6 +121,14 @@ export function heroAtLevel(hero: Hero, level: number): { stats: HeroStats; race
   }
 }
 
+/** Урон удара героя на уровне боя L при атаке героя attack (§5.5) */
+export const heroStrikeDamage = (level: number, attack: number) =>
+  Math.max(1, Math.floor((HERO_STRIKE_BASE + HERO_STRIKE_PER_LEVEL * level) * (1 + HERO_STRIKE_PER_ATTACK * attack)))
+
+export const heroQueueId = (uid: string) => `${HERO_QUEUE_PREFIX}${uid}`
+export const isHeroQueueId = (id: string) => id.startsWith(HERO_QUEUE_PREFIX)
+export const heroUidOf = (queueId: string) => queueId.slice(HERO_QUEUE_PREFIX.length)
+
 /** Снимок героя для боя на уровне battleLevel */
 export function balanceHero(hero: Hero, battleLevel: number, team: Team): BattleHero {
   const { stats, raceSkills } = heroAtLevel(hero, battleLevel)
@@ -129,6 +142,8 @@ export function balanceHero(hero: Hero, battleLevel: number, team: Team): Battle
     spells: getAvailableSpells(battleLevel, raceSkills),
     mana: maxMana,
     maxMana,
+    initiative: HERO_INITIATIVE,
+    strike: heroStrikeDamage(battleLevel, stats.attack),
     castThisRound: false,
     surrendered: false,
   }

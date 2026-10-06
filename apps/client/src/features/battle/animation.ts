@@ -15,12 +15,13 @@ export type AnimStep =
   | { kind: 'move'; unitId: string; from: Cell; to: Cell; duration: number }
   | { kind: 'strike'; sourceId: string; targetId: string; ranged: boolean; duration: number }
   | { kind: 'hits'; texts: FloatText[]; duration: number }
-  | { kind: 'spell'; center: Cell; radius: number; global: boolean; duration: number }
+  | { kind: 'spell'; center: Cell; radius: number; global: boolean; duration: number; color: 'magic' | 'hero' }
   | { kind: 'death'; unitId: string; duration: number }
 
 export const MOVE_MS_PER_CELL = 110
 
-export function buildSteps(events: readonly BattleEvent[]): AnimStep[] {
+/** units — позиции юнитов (для эффектов, привязанных к цели, например удара героя) */
+export function buildSteps(events: readonly BattleEvent[], units?: ReadonlyMap<string, Cell>): AnimStep[] {
   const steps: AnimStep[] = []
   const lastHits = (): Extract<AnimStep, { kind: 'hits' }> => {
     const last = steps[steps.length - 1]
@@ -60,7 +61,13 @@ export function buildSteps(events: readonly BattleEvent[]): AnimStep[] {
           radius: spell.targeting === 'area' ? 1.5 : 0.6,
           global: spell.targeting === 'global',
           duration: 420,
+          color: 'magic',
         })
+        break
+      }
+      case 'hero_strike': {
+        const target = units?.get(ev.targetId)
+        if (target) steps.push({ kind: 'spell', center: target, radius: 0.7, global: false, duration: 360, color: 'hero' })
         break
       }
       case 'ability':

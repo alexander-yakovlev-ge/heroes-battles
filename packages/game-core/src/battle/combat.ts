@@ -54,12 +54,15 @@ export function computeDamage(
   target: UnitState,
   opts: DamageOptions,
   rng: Rng | null,
+  /** Для прогноза: все броски минимальные/максимальные (без rng) */
+  roll?: 'min' | 'max',
 ): number {
   const t = tmpl(attacker)
   const n = Math.min(attacker.count, 10)
   if (n <= 0) return 0
   let rolled = 0
   if (rng) for (let i = 0; i < n; i++) rolled += rng.int(t.damageMin, t.damageMax)
+  else if (roll) rolled = (roll === 'min' ? t.damageMin : t.damageMax) * n
   else rolled = ((t.damageMin + t.damageMax) / 2) * n
   const base = (rolled * attacker.count) / n
 
@@ -75,12 +78,13 @@ export function computeDamage(
   if (opts.chargeCells && hasAbility(attacker, 'charge')) mods *= 1 + Math.min(opts.chargeCells * CHARGE_PER_CELL, CHARGE_MAX)
   if (hasAbility(attacker, 'deadly_strike')) {
     if (rng) mods *= rng.chance(PROC_CHANCE) ? 2 : 1
+    else if (roll) mods *= roll === 'max' ? 2 : 1
     else mods *= 1 + PROC_CHANCE
   }
   if (hasEffect(attacker, 'confusion')) mods *= 0.5
   mods *= roleMultiplier(attacker, target)
   const dmg = base * attackMultiplier(diff) * mods
-  return rng ? Math.max(1, Math.floor(dmg)) : dmg
+  return rng || roll ? Math.max(1, Math.floor(dmg)) : dmg
 }
 
 export function addEffect(target: UnitState, effect: Effect, events: BattleEvent[]): void {

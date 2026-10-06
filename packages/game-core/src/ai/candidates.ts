@@ -6,14 +6,36 @@ import type { Action, BattleState, Cell } from '../types.js'
 
 /**
  * Кандидаты на действие игрока uid в текущем состоянии.
+ * Ход юнита — unit (перемещение, атаки, способности, ожидание, защита);
+ * ход героя (§5.3) — casts (заклинания) и hero (удары героя и пропуск).
  * Для площадных заклинаний в качестве центров берутся только клетки юнитов.
  */
-export function candidateActions(state: BattleState, uid: string): { unit: Action[]; casts: Action[] } {
+export function candidateActions(state: BattleState, uid: string): { unit: Action[]; casts: Action[]; hero: Action[] } {
   const unit: Action[] = []
   const casts: Action[] = []
-  if (state.status !== 'active' || !state.activeUnitId) return { unit, casts }
+  const hero: Action[] = []
+  if (state.status !== 'active') return { unit, casts, hero }
+
+  if (state.activeHeroUid) {
+    const h = state.heroes[state.activeHeroUid]
+    if (state.activeHeroUid !== uid || !h) return { unit, casts, hero }
+    const unitCells: Cell[] = state.units.filter(alive).map((x) => ({ x: x.x, y: x.y }))
+    for (const spellId of h.spells) {
+      const spell = getSpell(spellId)
+      if (h.mana < spell.mana) continue
+      const targets: Cell[] = spell.targeting === 'global' ? [{ x: 0, y: 0 }] : unitCells
+      for (const target of targets) {
+        if (isValidSpellTarget(state, spellId, h.team, target)) casts.push({ type: 'cast', heroUid: uid, spellId, target })
+      }
+    }
+    for (const e of state.units) if (alive(e) && e.team !== h.team) hero.push({ type: 'hero_strike', heroUid: uid, targetId: e.id })
+    hero.push({ type: 'hero_pass', heroUid: uid })
+    return { unit, casts, hero }
+  }
+
+  if (!state.activeUnitId) return { unit, casts, hero }
   const u = findUnitState(state, state.activeUnitId)
-  if (u.owner !== uid) return { unit, casts }
+  if (u.owner !== uid) return { unit, casts, hero }
   const t = tmpl(u)
 
   unit.push({ type: 'defend', unitId: u.id })
@@ -31,18 +53,5 @@ export function candidateActions(state: BattleState, uid: string): { unit: Actio
         unit.push({ type: 'ability', unitId: u.id, targetId: target.id })
     }
   }
-
-  const hero = state.heroes[uid]
-  if (hero && !hero.castThisRound) {
-    const unitCells: Cell[] = state.units.filter(alive).map((x) => ({ x: x.x, y: x.y }))
-    for (const spellId of hero.spells) {
-      const spell = getSpell(spellId)
-      if (hero.mana < spell.mana) continue
-      const targets: Cell[] = spell.targeting === 'global' ? [{ x: 0, y: 0 }] : unitCells
-      for (const target of targets) {
-        if (isValidSpellTarget(state, spellId, hero.team, target)) casts.push({ type: 'cast', heroUid: uid, spellId, target })
-      }
-    }
-  }
-  return { unit, casts }
+  return { unit, casts, hero }
 }

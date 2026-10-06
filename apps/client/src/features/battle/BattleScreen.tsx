@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
-import { getSpell, getUnit, type Action, type ArmySlot, type BattleEvent, type BattleState, type SpellId } from '@hb/game-core'
+import {
+  forecastAction,
+  getSpell,
+  getUnit,
+  type Action,
+  type ArmySlot,
+  type BattleEvent,
+  type BattleState,
+  type RaceId,
+  type SpellId,
+  type UnitState,
+} from '@hb/game-core'
+import { HeroIcon } from '../../components/HeroIcon'
 import { UnitIcon } from '../../components/UnitIcon'
 import { Button, Loading, Row } from '../../components/ui'
 import { useBattleSetup } from '../../store/battleSetup'
@@ -14,12 +26,14 @@ import { BattleBoard, type Highlights } from './BattleBoard'
 import {
   BOT_UID,
   activeUnit,
+  aimedAction,
   applyPlayerAction,
   attackCells,
-  prepareBotBattle,
   botStep,
+  isPlayerHeroTurn,
   isPlayerTurn,
   playerOptions,
+  prepareBotBattle,
   resolveTap,
   startBotBattle,
   unitAt,
@@ -27,8 +41,11 @@ import {
   type BotPreparation,
   type Step,
 } from './controller'
-import { Preparation } from './Preparation'
+import { forecastText } from './forecastText'
+import { HelpModal } from './HelpModal'
 import { formatEvent, type LogLine } from './log'
+import { Preparation } from './Preparation'
+import { TurnQueue } from './TurnQueue'
 
 const BOT_DELAY_MS = 280
 const MAX_LOG = 80
@@ -40,7 +57,10 @@ interface BattleView {
   start: number
 }
 
-/** Экран боя с ботом (§10): поле на Skia, очередь, панель действий, магия, журнал */
+/**
+ * Экран боя с ботом (§10): подготовка, поле на Skia, шкала очереди с героями, ход героя
+ * (удар или заклинание), атака в два нажатия с прогнозом урона, журнал, справка.
+ */
 export default function BattleScreen() {
   const { t } = useTranslation()
   const hero = useSession((s) => s.hero)
@@ -53,17 +73,21 @@ export default function BattleScreen() {
   const battleRef = useRef<BotBattle | null>(null)
   const [view, setView] = useState<BattleView | null>(null)
   const [now, setNow] = useState(0)
+  /** Ход героя: выбранное заклинание или удар героя */
   const [spell, setSpell] = useState<SpellId | null>(null)
   const [spellMenu, setSpellMenu] = useState(false)
+  const [heroStrike, setHeroStrike] = useState(false)
+  /** Цель, на которую прицелились первым нажатием */
+  const [aim, setAim] = useState<string | null>(null)
   const [inspect, setInspect] = useState<string | null>(null)
-  /** Цель ближнего боя, для которой игрок выбирает клетку атаки */
-  const [attackTarget, setAttackTarget] = useState<string | null>(null)
   /** Подготовка к бою: противник известен, игрок делит стаки (§5.1) */
   const [prep, setPrep] = useState<BotPreparation | null>(null)
   const [deployed, setDeployed] = useState<ArmySlot[]>([])
+  const [heroRaces, setHeroRaces] = useState<Record<string, RaceId>>({})
   const [log, setLog] = useState<LogLine[]>([])
   const [showLog, setShowLog] = useState(Platform.OS === 'web')
   const [confirmSurrender, setConfirmSurrender] = useState(false)
+  const [help, setHelp] = useState(false)
   const logId = useRef(0)
   const cellRef = useRef(0)
 
@@ -88,10 +112,19 @@ export default function BattleScreen() {
       pushLog(step.state, step.events)
       const start = performance.now()
       setNow(start)
-      setView({ state: step.state, prev, steps: buildSteps(step.events), start })
+      const positions = new Map(prev.units.map((u) => [u.id, { x: u.x, y: u.y }]))
+      setView({ state: step.state, prev, steps: buildSteps(step.events, positions), start })
     },
     [pushLog],
   )
+
+  const resetModes = () => {
+    setSpell(null)
+    setSpellMenu(false)
+    setHeroStrike(false)
+    setAim(null)
+    setInspect(null)
+  }
 
   // Создание боя: при старте с экрана «Бой с ботом» или после загрузки данных (перезагрузка страницы)
   const createdFor = useRef<number | null>(null)
@@ -104,10 +137,9 @@ export default function BattleScreen() {
     setView(null)
     setPrep(p)
     setDeployed(p.playerArmy)
+    setHeroRaces({ [hero.uid]: hero.startingRace, [BOT_UID]: p.botHero.startingRace })
     setLog([])
-    setSpell(null)
-    setSpellMenu(false)
-    setAttackTarget(null)
+    resetModes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleId, canStart])
 
@@ -133,7 +165,7 @@ export default function BattleScreen() {
     return () => cancelAnimationFrame(raf)
   }, [view, animating])
 
-  // Ход бота после окончания анимации
+  // Ход бота (юнитом или героем) после окончания анимации
   useEffect(() => {
     const battle = battleRef.current
     if (!battle || !view || animating) return
@@ -149,36 +181,52 @@ export default function BattleScreen() {
   const battle = battleRef.current
   const state = view?.state
   const playerTurn = !!battle && !animating && isPlayerTurn(battle)
+  const heroTurn = playerTurn && !!battle && isPlayerHeroTurn(battle)
   const options = useMemo(() => (battle && playerTurn ? playerOptions(battle) : null), [battle, playerTurn, view])
 
   const highlights: Highlights = useMemo(() => {
-    const h: Highlights = { moves: new Set(), targets: new Set(), spellCells: new Set(), attackCells: new Set(), activeId: state?.activeUnitId ?? null }
-    if (!options || !battle) return h
-    if (attackTarget) {
-      h.targets.add(attackTarget)
-      h.attackCells = attackCells(battle, options, attackTarget)
-      return h
+    const h: Highlights = {
+      moves: new Set(),
+      targets: new Set(),
+      spellCells: new Set(),
+      attackCells: new Set(),
+      activeId: state?.activeUnitId ?? null,
     }
+    if (!options || !battle) return h
     if (spell) {
       const targets = options.casts.get(spell)
       if (targets) for (const k of targets.keys()) h.spellCells.add(k)
+      return h
+    }
+    if (heroStrike) {
+      if (aim) h.targets.add(aim)
+      else for (const id of options.heroStrikes.keys()) h.targets.add(id)
+      return h
+    }
+    if (aim) {
+      h.targets.add(aim)
+      h.attackCells = attackCells(battle, options, aim)
       return h
     }
     for (const k of options.moves.keys()) h.moves.add(k)
     for (const id of options.attacks.keys()) h.targets.add(id)
     for (const id of options.shoots.keys()) h.targets.add(id)
     return h
-  }, [options, spell, attackTarget, battle, state?.activeUnitId])
+  }, [options, spell, heroStrike, aim, battle, state?.activeUnitId])
+
+  /** Прогноз удара по цели прицела */
+  const forecast = useMemo(() => {
+    if (!battle || !options || !aim || !state) return null
+    const action = aimedAction(battle, options, aim, heroStrike)
+    return action ? forecastAction(state, action) : null
+  }, [battle, options, aim, heroStrike, state])
 
   const act = useCallback(
     (action: Action | null) => {
       const b = battleRef.current
       if (!b || !action) return
       const prev = b.state
-      setSpell(null)
-      setSpellMenu(false)
-      setInspect(null)
-      setAttackTarget(null)
+      resetModes()
       show(prev, applyPlayerAction(b, action))
     },
     [show],
@@ -188,19 +236,22 @@ export default function BattleScreen() {
     (x: number, y: number) => {
       const b = battleRef.current
       if (!b) return
+      const tapped = unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null
       if (!options) {
-        setInspect(unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)
+        setInspect(tapped)
         return
       }
-      const result = resolveTap(b, options, { x, y }, { spell, attackTarget })
+      const result = resolveTap(b, options, { x, y }, { spell, heroStrike, aim })
       if (result.kind === 'action') act(result.action)
-      else if (result.kind === 'chooseAttack') setAttackTarget(result.targetId)
-      else {
-        setAttackTarget(null)
-        setInspect(unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)
+      else if (result.kind === 'aim') {
+        setAim(result.targetId)
+        setInspect(result.targetId)
+      } else {
+        setAim(null)
+        setInspect(tapped)
       }
     },
-    [options, spell, attackTarget, act],
+    [options, spell, heroStrike, aim, act],
   )
 
   // Тестовый хук для e2e на web: Playwright кликает по холсту по координатам клеток
@@ -212,24 +263,28 @@ export default function BattleScreen() {
     }
     ;(globalThis as { __hbBattle?: unknown }).__hbBattle = {
       phase: 'battle',
-      attackTarget,
-      attackCells: battle && options && attackTarget ? [...attackCells(battle, options, attackTarget)] : [],
-      attacks: options ? Object.fromEntries([...options.attacks].map(([id, list]) => [id, list.map((a) => `${a.from.x},${a.from.y}`)])) : {},
       status: state.status,
       round: state.round,
       playerTurn,
+      heroTurn,
+      aim,
+      forecast,
+      attackCells: battle && options && aim && !heroStrike ? [...attackCells(battle, options, aim)] : [],
+      attacks: options ? Object.fromEntries([...options.attacks].map(([id, list]) => [id, list.map((a) => `${a.from.x},${a.from.y}`)])) : {},
+      shoots: options ? [...options.shoots.keys()] : [],
+      heroStrikes: options ? [...options.heroStrikes.keys()] : [],
       cell: cellRef.current,
       moves: options ? [...options.moves.keys()] : [],
-      targets: options ? [...options.attacks.keys(), ...options.shoots.keys()] : [],
       units: state.units.map((u) => ({ id: u.id, team: u.team, x: u.x, y: u.y, count: u.count })),
       activeId: state.activeUnitId,
+      queue: state.queue,
     }
   })
 
   // Размер клетки: поле во всю ширину, но не выше ~60% экрана
   const cellFor = (w: number, h: number) => {
     const availW = Math.min(win.width - space.md * 2, 1100)
-    const availH = (win.height - insets.top - insets.bottom) * 0.62
+    const availH = (win.height - insets.top - insets.bottom) * 0.6
     return Math.max(24, Math.floor(Math.min(availW / w, availH / h)))
   }
 
@@ -246,14 +301,60 @@ export default function BattleScreen() {
   const playhead = animating ? playheadAt(view.steps, now - view.start) : { index: view.steps.length, t: 0 }
   const myHero = state.heroes[hero.uid]!
   const active = activeUnit(state)
-
   const cell = cellFor(state.grid.width, state.grid.height)
   cellRef.current = cell
-
-  const queue = state.queue.map((id) => state.units.find((u) => u.id === id)!).filter((u) => u && u.count > 0)
-  const inspected = inspect ? state.units.find((u) => u.id === inspect) : undefined
+  const inspected = inspect ? state.units.find((u) => u.id === inspect && u.count > 0) : undefined
   const finished = state.status === 'finished' && !animating
   const won = state.winner === 'red'
+
+  let hint: ReactNode = null
+  if (aim) {
+    hint = (
+      <Row style={s.hintRow}>
+        <View style={{ flex: 1 }}>
+          {forecast ? (
+            <Text style={s.forecast} testID="forecast">
+              {forecastText(t, forecast)}
+            </Text>
+          ) : null}
+          <Text style={s.dim}>
+            {t('battle.aimHint')}
+            {!heroStrike && options?.attacks.has(aim) && !options.shoots.has(aim) ? ` ${t('battle.aimHintCells')}` : ''}.
+          </Text>
+        </View>
+        <Button small variant="ghost" title={t('common.cancel')} onPress={() => setAim(null)} testID="cancel-aim" />
+      </Row>
+    )
+  } else if (spell) {
+    hint = (
+      <Row style={s.hintRow}>
+        <Text style={s.hint}>
+          {t(`spell.${spell}`)}: {t('battle.chooseTarget')}
+        </Text>
+        <Button small variant="ghost" title={t('common.cancel')} onPress={() => setSpell(null)} testID="cancel-spell" />
+      </Row>
+    )
+  } else if (heroTurn) {
+    hint = (
+      <Row>
+        <HeroIcon race={hero.startingRace} size={32} />
+        <Text style={s.hint}>{heroStrike ? t('battle.heroStrikeChoose') : t('battle.heroChoose')}</Text>
+      </Row>
+    )
+  } else if (inspected) {
+    hint = <UnitInfo unit={inspected} state={state} />
+  } else if (active) {
+    hint = (
+      <Row>
+        <UnitIcon unitId={active.templateId} size={28} />
+        <Text style={s.hint} numberOfLines={2}>
+          {t(getUnit(active.templateId).nameKey)} · {active.count}
+          {active.shotsLeft !== undefined ? ` · ${t('battle.shots', { count: active.shotsLeft })}` : ''}
+          {playerTurn ? ` — ${t('battle.hint')}` : ''}
+        </Text>
+      </Row>
+    )
+  }
 
   return (
     <View style={[s.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.sm }]}>
@@ -261,73 +362,80 @@ export default function BattleScreen() {
         <Text style={s.round}>{t('battle.round', { round: state.round })}</Text>
         <Text style={s.dim}>{t('battle.battleLevel', { level: state.battleLevel })}</Text>
         <Text style={[s.turn, { color: playerTurn ? colors.gold : colors.textDim }]} testID="turn-indicator">
-          {state.status === 'active' ? (isPlayerTurn(battle) ? t('battle.yourTurn') : t('battle.enemyTurn')) : ''}
+          {state.status !== 'active'
+            ? ''
+            : state.activeHeroUid
+              ? `${t('battle.heroTurn')}${state.activeHeroUid === hero.uid ? '' : ` (${t('battle.enemy')})`}`
+              : isPlayerTurn(battle)
+                ? t('battle.yourTurn')
+                : t('battle.enemyTurn')}
         </Text>
         <Text style={s.mana} testID="mana">
           {t('battle.mana', { mana: myHero.mana, max: myHero.maxMana })}
         </Text>
       </Row>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.queueScroller} contentContainerStyle={s.queue} testID="queue">
-        {queue.slice(0, 14).map((u, i) => (
-          <View key={`${u.id}-${i}`} style={[s.queueItem, { borderColor: u.team === 'red' ? colors.redTeam : colors.blueTeam }, i === 0 && s.queueActive]}>
-            <UnitIcon unitId={u.templateId} size={i === 0 ? 40 : 32} />
-          </View>
-        ))}
-      </ScrollView>
+      <TurnQueue state={state} heroRaces={heroRaces} />
 
       <View style={s.boardWrap}>
         <BattleBoard state={state} prevState={view.prev} steps={view.steps} playhead={playhead} cell={cell} highlights={highlights} onTap={onTap} />
       </View>
 
-      <View style={s.info}>
-        {attackTarget ? (
-          <Row>
-            <Text style={s.hint}>{t('battle.chooseAttackCell')}</Text>
-            <Button small variant="ghost" title={t('common.cancel')} onPress={() => setAttackTarget(null)} testID="cancel-attack" />
-          </Row>
-        ) : spell ? (
-          <Row>
-            <Text style={s.hint}>
-              {t(`spell.${spell}`)}: {t('battle.chooseTarget')}
-            </Text>
-            <Button small variant="ghost" title={t('common.cancel')} onPress={() => setSpell(null)} testID="cancel-spell" />
-          </Row>
-        ) : inspected ? (
-          <UnitInfo unitId={inspected.templateId} count={inspected.count} team={inspected.team} effects={inspected.effects.map((e) => t(`effect.${e.id}`))} shots={inspected.shotsLeft} />
-        ) : active ? (
-          <Row>
-            <UnitIcon unitId={active.templateId} size={28} />
-            <Text style={s.hint} numberOfLines={2}>
-              {t(getUnit(active.templateId).nameKey)} · {active.count}
-              {active.shotsLeft !== undefined ? ` · ${t('battle.shots', { count: active.shotsLeft })}` : ''}
-              {playerTurn ? ` — ${t('battle.hint')}` : ''}
-            </Text>
-          </Row>
-        ) : null}
-      </View>
+      <View style={s.info}>{hint}</View>
 
       <Row style={s.actions}>
-        <Button small variant="secondary" title={t('battle.wait')} disabled={!playerTurn || !options?.wait} onPress={() => act(options?.wait ?? null)} testID="action-wait" />
-        <Button small variant="secondary" title={t('battle.defend')} disabled={!playerTurn || !options?.defend} onPress={() => act(options?.defend ?? null)} testID="action-defend" />
-        <Button
-          small
-          variant="secondary"
-          title={t('battle.spells')}
-          disabled={!playerTurn || myHero.spells.length === 0}
-          onPress={() => setSpellMenu(!spellMenu)}
-          testID="action-spells"
-        />
+        {heroTurn ? (
+          <>
+            <Button
+              small
+              variant={heroStrike ? 'primary' : 'secondary'}
+              title={t('battle.heroStrike', { damage: myHero.strike })}
+              onPress={() => {
+                setSpell(null)
+                setSpellMenu(false)
+                setAim(null)
+                setHeroStrike(!heroStrike)
+              }}
+              testID="action-hero-strike"
+            />
+            <Button
+              small
+              variant={spellMenu || spell ? 'primary' : 'secondary'}
+              title={t('battle.spells')}
+              disabled={myHero.spells.length === 0}
+              onPress={() => {
+                setHeroStrike(false)
+                setAim(null)
+                setSpell(null)
+                setSpellMenu(!spellMenu)
+              }}
+              testID="action-spells"
+            />
+            <Button small variant="secondary" title={t('battle.heroPass')} onPress={() => act(options?.heroPass ?? null)} testID="action-hero-pass" />
+          </>
+        ) : (
+          <>
+            <Button small variant="secondary" title={t('battle.wait')} disabled={!playerTurn || !options?.wait} onPress={() => act(options?.wait ?? null)} testID="action-wait" />
+            <Button
+              small
+              variant="secondary"
+              title={t('battle.defend')}
+              disabled={!playerTurn || !options?.defend}
+              onPress={() => act(options?.defend ?? null)}
+              testID="action-defend"
+            />
+          </>
+        )}
+        <Button small variant="ghost" title="?" onPress={() => setHelp(true)} testID="action-help" />
         <Button small variant="ghost" title={t('battle.log')} onPress={() => setShowLog(!showLog)} testID="action-log" />
         <Button small variant="danger" title={t('battle.surrender')} disabled={state.status !== 'active'} onPress={() => setConfirmSurrender(true)} testID="action-surrender" />
       </Row>
 
-      {spellMenu && playerTurn ? (
+      {spellMenu && heroTurn ? (
         <View style={s.spellMenu} testID="spell-menu">
           {myHero.spells.map((id) => {
             const sp = getSpell(id)
             const available = !!options?.casts.get(id)?.size
-            const reason = myHero.castThisRound ? t('battle.alreadyCast') : myHero.mana < sp.mana ? t('battle.noMana') : ''
             return (
               <Pressable
                 key={id}
@@ -343,7 +451,7 @@ export default function BattleScreen() {
                 <Text style={s.spellName}>
                   {t(`spell.${id}`)} · {sp.mana}
                 </Text>
-                <Text style={s.spellDesc}>{reason || t(`spellDesc.${id}`)}</Text>
+                <Text style={s.spellDesc}>{myHero.mana < sp.mana ? t('battle.noMana') : t(`spellDesc.${id}`)}</Text>
               </Pressable>
             )
           })}
@@ -359,6 +467,8 @@ export default function BattleScreen() {
           ))}
         </ScrollView>
       ) : null}
+
+      <HelpModal visible={help} onClose={() => setHelp(false)} />
 
       <Modal transparent visible={confirmSurrender} animationType="fade" onRequestClose={() => setConfirmSurrender(false)}>
         <View style={s.modalBg}>
@@ -390,7 +500,12 @@ export default function BattleScreen() {
               {state.endReason === 'elimination' && !won ? t('battle.reason_elimination_lost') : t(`battle.reason_${state.endReason ?? 'elimination'}`)}
             </Text>
             <Row style={s.modalRow}>
-              <Button variant="secondary" title={t('battle.toMenu')} onPress={() => (router.canDismiss() ? router.dismissTo('/menu') : router.replace('/menu'))} testID="result-menu" />
+              <Button
+                variant="secondary"
+                title={t('battle.toMenu')}
+                onPress={() => (router.canDismiss() ? router.dismissTo('/menu') : router.replace('/menu'))}
+                testID="result-menu"
+              />
               <Button title={t('battle.again')} onPress={() => useBattleSetup.getState().start(difficulty)} testID="result-again" />
             </Row>
           </View>
@@ -400,22 +515,30 @@ export default function BattleScreen() {
   )
 }
 
-function UnitInfo({ unitId, count, team, effects, shots }: { unitId: string; count: number; team: string; effects: string[]; shots?: number }) {
+/** Карточка юнита по нажатию: характеристики с учётом героя, роль, эффекты */
+function UnitInfo({ unit, state }: { unit: UnitState; state: BattleState }) {
   const { t } = useTranslation()
-  const u = getUnit(unitId)
+  const u = getUnit(unit.templateId)
+  const heroStats = state.heroes[unit.owner]?.stats
+  const withHero = (base: number, bonus: number) => (bonus ? t('unitInfo.withHero', { value: base + bonus, hero: bonus }) : String(base))
+  const extra = [t(`unitInfo.roleHint_${u.role}`)]
+  if (unit.defending) extra.push(t('battle.defending'))
+  extra.push(...unit.effects.map((e) => t(`effect.${e.id}`)))
   return (
-    <Row style={{ alignItems: 'flex-start' }} >
-      <UnitIcon unitId={unitId} size={40} />
+    <Row style={{ alignItems: 'flex-start' }}>
+      <UnitIcon unitId={unit.templateId} size={40} />
       <View style={{ flex: 1 }} testID="unit-info">
-        <Text style={[s.hint, { color: team === 'red' ? '#f0a99f' : '#a9c8f0' }]}>
-          {t(u.nameKey)} · {count}
+        <Text style={[s.hint, { color: unit.team === 'red' ? '#f0a99f' : '#a9c8f0' }]}>
+          {t(u.nameKey)} · {unit.count}
         </Text>
         <Text style={s.dim}>
-          {t('unitInfo.attack')} {u.attack} · {t('unitInfo.defense')} {u.defense} · {t('unitInfo.damage')} {u.damageMin}–{u.damageMax} · {t('unitInfo.health')} {u.health} ·{' '}
-          {t('unitInfo.speed')} {u.speed} · {t('unitInfo.initiative')} {u.initiative}
-          {shots !== undefined ? ` · ${t('battle.shots', { count: shots })}` : ''}
+          {t('unitInfo.attack')} {withHero(u.attack, heroStats?.attack ?? 0)} · {t('unitInfo.defense')} {withHero(u.defense, heroStats?.defense ?? 0)} ·{' '}
+          {t('unitInfo.damage')} {u.damageMin}–{u.damageMax} · {t('unitInfo.health')} {u.health} · {t('unitInfo.speed')} {u.speed} ·{' '}
+          {t('unitInfo.initiative')} {u.initiative}
+          {u.ranged ? ` · ${t('unitInfo.range')} ${u.ranged.range}` : ''}
+          {unit.shotsLeft !== undefined ? ` · ${t('battle.shots', { count: unit.shotsLeft })}` : ''}
         </Text>
-        {effects.length ? <Text style={s.dim}>{effects.join(', ')}</Text> : null}
+        <Text style={s.dim}>{extra.join(' · ')}</Text>
       </View>
     </Row>
   )
@@ -428,13 +551,11 @@ const s = StyleSheet.create({
   dim: { color: colors.textDim, fontSize: 13 },
   turn: { fontWeight: '700', fontSize: 15 },
   mana: { color: '#9ec3ff', marginLeft: 'auto', fontWeight: '600' },
-  queueScroller: { flexGrow: 0 },
-  queue: { gap: 4, alignItems: 'center' },
-  queueItem: { borderWidth: 2, borderRadius: radius, padding: 1 },
-  queueActive: { borderWidth: 3 },
   boardWrap: { alignItems: 'center' },
-  info: { minHeight: 44, justifyContent: 'center' },
+  info: { minHeight: 48, justifyContent: 'center' },
+  hintRow: { alignItems: 'center' },
   hint: { color: colors.text, fontSize: 14, flexShrink: 1 },
+  forecast: { color: colors.gold, fontSize: 14, fontWeight: '700' },
   actions: { flexWrap: 'wrap', justifyContent: 'center' },
   spellMenu: { backgroundColor: colors.panel, borderRadius: radius, borderWidth: 1, borderColor: colors.border, padding: space.sm, gap: space.xs },
   spell: { padding: space.sm, borderRadius: radius, backgroundColor: colors.panelAlt },

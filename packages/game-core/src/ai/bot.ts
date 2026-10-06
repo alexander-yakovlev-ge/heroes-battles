@@ -54,32 +54,40 @@ function approach(state: BattleState, actions: Action[]): Action | undefined {
 }
 
 /** Выбор действия бота (§9). Вызывается повторно, пока ход не перейдёт к другому игроку. */
+/** Ход героя (§5.3): Easy — случайное заклинание или удар; Normal — самое выгодное из них */
+function chooseHeroAction(state: BattleState, uid: string, difficulty: BotDifficulty, rng: Rng, casts: Action[], hero: Action[]): Action | null {
+  const strikes = hero.filter((a) => a.type === 'hero_strike')
+  const pass = hero.find((a) => a.type === 'hero_pass') ?? null
+  if (difficulty === 'easy') {
+    if (casts.length > 0 && rng.chance(0.4)) return rng.pick(casts)
+    return strikes.length > 0 ? rng.pick(strikes) : pass
+  }
+  const seed = rng.int(0, 0x7fffffff)
+  let best: Action | null = pass
+  let bestScore = 0
+  for (const a of [...strikes, ...casts]) {
+    const s = evaluate(state, a, uid, seed)
+    if (s > bestScore) {
+      bestScore = s
+      best = a
+    }
+  }
+  return best
+}
+
 export function chooseBotAction(state: BattleState, uid: string, difficulty: BotDifficulty, rng: Rng): Action | null {
-  const { unit, casts } = candidateActions(state, uid)
+  const { unit, casts, hero } = candidateActions(state, uid)
+  if (hero.length > 0) return chooseHeroAction(state, uid, difficulty, rng, casts, hero)
   if (unit.length === 0) return null
   const u = findUnitState(state, state.activeUnitId!)
 
   if (difficulty === 'easy') {
-    if (casts.length > 0 && rng.chance(0.3)) return rng.pick(casts)
     const offensive = unit.filter((a) => a.type === 'attack' || a.type === 'shoot')
     const pool = offensive.length > 0 && rng.chance(0.7) ? offensive : unit.filter((a) => a.type !== 'wait')
     return rng.pick(pool)
   }
 
   const seed = rng.int(0, 0x7fffffff)
-  if (casts.length > 0) {
-    let bestCast: Action | null = null
-    let bestCastScore = 0
-    for (const a of casts) {
-      const s = evaluate(state, a, uid, seed)
-      if (s > bestCastScore) {
-        bestCastScore = s
-        bestCast = a
-      }
-    }
-    // Порог: заклинание должно стоить хотя бы ~1 веса материала
-    if (bestCast && bestCastScore >= 1) return bestCast
-  }
 
   let best: Action | null = null
   let bestScore = 0

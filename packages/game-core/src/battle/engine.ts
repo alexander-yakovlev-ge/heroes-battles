@@ -10,7 +10,7 @@ import {
 import { getSpell } from '../data/spells.js'
 import { getUnit } from '../data/units.js'
 import { generateGrid, key, obstacleSet, rectCells, rectFree, rectsAdjacent } from '../grid.js'
-import { balanceHero } from '../hero.js'
+import { balanceHero, heroQueueId, heroUidOf, isHeroQueueId } from '../hero.js'
 import type { Rng } from '../rng.js'
 import type {
   Action,
@@ -119,6 +119,7 @@ export function createBattle(input: CreateBattleInput, rng: Rng): ActionResult {
     units: [],
     queue: [],
     activeUnitId: null,
+    activeHeroUid: null,
     round: 0,
     seq: 0,
     timeouts: {},
@@ -175,12 +176,28 @@ export function createBattle(input: CreateBattleInput, rng: Rng): ActionResult {
 // Ход боя
 // ---------------------------------------------------------------------------
 
+/** Герой ходит, пока не сдался и у него остались живые юниты */
+const heroCanAct = (state: BattleState, uid: string) =>
+  !state.heroes[uid]!.surrendered && state.units.some((u) => u.owner === uid && alive(u))
+
+/**
+ * Очередь раунда (§5.3): юниты и герои по инициативе. При равенстве — по скорости
+ * (у героя её нет — он после юнитов той же инициативы), затем по жребию.
+ */
 function buildQueue(state: BattleState): string[] {
-  return state.units
+  const units = state.units
     .filter(alive)
-    .map((u) => ({ u, init: effectiveInitiative(state, u), speed: effectiveSpeed(u) }))
-    .sort((a, b) => b.init - a.init || b.speed - a.speed || a.u.tieOrder - b.u.tieOrder)
-    .map((x) => x.u.id)
+    .map((u) => ({ id: u.id, init: effectiveInitiative(state, u), speed: effectiveSpeed(u), tie: u.tieOrder }))
+  const heroes = Object.values(state.heroes)
+    .filter((h) => heroCanAct(state, h.uid))
+    .map((h, i) => ({ id: heroQueueId(h.uid), init: h.initiative, speed: 0, tie: 10_000 + i }))
+  return [...units, ...heroes].sort((a, b) => b.init - a.init || b.speed - a.speed || a.tie - b.tie).map((x) => x.id)
+}
+
+/** Кто сейчас ходит: uid игрока (владельца активного юнита или героя) */
+export function activeActor(state: BattleState): string | null {
+  if (state.activeHeroUid) return state.activeHeroUid
+  return state.activeUnitId ? (state.units.find((u) => u.id === state.activeUnitId)?.owner ?? null) : null
 }
 
 function startRound(state: BattleState, events: BattleEvent[]): void {
@@ -270,9 +287,10 @@ function beginTurn(state: BattleState, u: UnitState, events: BattleEvent[]): boo
   return true
 }
 
-/** Переход к следующему юниту, способному действовать */
+/** Переход к следующему юниту или герою, способному действовать */
 function advance(state: BattleState, events: BattleEvent[]): void {
   state.activeUnitId = null
+  state.activeHeroUid = null
   for (let guard = 0; guard < 10_000; guard++) {
     if (checkEnd(state, events)) return
     const id = state.queue[0]
@@ -280,6 +298,16 @@ function advance(state: BattleState, events: BattleEvent[]): void {
       endRound(state, events)
       if (state.status === 'finished') return
       continue
+    }
+    if (isHeroQueueId(id)) {
+      const uid = heroUidOf(id)
+      if (!state.heroes[uid] || !heroCanAct(state, uid)) {
+        state.queue.shift()
+        continue
+      }
+      state.activeHeroUid = uid
+      events.push({ type: 'hero_turn', heroUid: uid })
+      return
     }
     const u = state.units.find((x) => x.id === id)
     if (!u || !alive(u)) {
@@ -299,7 +327,7 @@ function advance(state: BattleState, events: BattleEvent[]): void {
 }
 
 function endTurn(state: BattleState, events: BattleEvent[]): void {
-  const id = state.activeUnitId
+  const id = state.activeHeroUid ? heroQueueId(state.activeHeroUid) : state.activeUnitId
   state.queue = state.queue.filter((x) => x !== id)
   advance(state, events)
 }
@@ -307,6 +335,15 @@ function endTurn(state: BattleState, events: BattleEvent[]): void {
 // ---------------------------------------------------------------------------
 // Действия
 // ---------------------------------------------------------------------------
+
+/** Герой, который сейчас ходит и принадлежит actor */
+function activeHero(state: BattleState, heroUid: string, actor: string) {
+  if (state.status !== 'active') throw new IllegalActionError('battle_finished')
+  if (heroUid !== actor) throw new IllegalActionError('not_owner')
+  const hero = state.heroes[actor]
+  if (!hero || state.activeHeroUid !== actor) throw new IllegalActionError('not_your_turn')
+  return hero
+}
 
 function activeUnit(state: BattleState, unitId: string, actor: string): UnitState {
   if (state.status !== 'active') throw new IllegalActionError('battle_finished')
@@ -386,7 +423,7 @@ function surrender(state: BattleState, uid: string, events: BattleEvent[], reaso
       events.push({ type: 'death', unitId: u.id })
     }
   }
-  state.queue = state.queue.filter((id) => alive(findUnitState(state, id)))
+  state.queue = state.queue.filter((id) => (isHeroQueueId(id) ? heroUidOf(id) !== uid : alive(findUnitState(state, id))))
   checkEnd(state, events, reason)
 }
 
@@ -402,18 +439,13 @@ export function applyAction(prev: BattleState, action: Action, actor: string, rn
     case 'surrender': {
       if (action.heroUid !== actor) throw new IllegalActionError('not_owner')
       if (state.status !== 'active') throw new IllegalActionError('battle_finished')
-      const wasActive = state.activeUnitId ? findUnitState(state, state.activeUnitId).owner === actor : false
+      const wasActive = activeActor(state) === actor
       surrender(state, actor, events, 'surrender')
       if (state.status === 'active' && wasActive) advance(state, events)
       break
     }
     case 'cast': {
-      if (state.status !== 'active') throw new IllegalActionError('battle_finished')
-      if (action.heroUid !== actor) throw new IllegalActionError('not_owner')
-      const hero = state.heroes[actor]
-      const active = state.activeUnitId ? findUnitState(state, state.activeUnitId) : undefined
-      if (!hero || !active || active.owner !== actor) throw new IllegalActionError('not_your_turn')
-      if (hero.castThisRound) throw new IllegalActionError('already_cast')
+      const hero = activeHero(state, action.heroUid, actor)
       if (!hero.spells.includes(action.spellId)) throw new IllegalActionError('spell_unavailable')
       const spell = getSpell(action.spellId)
       if (hero.mana < spell.mana) throw new IllegalActionError('no_mana')
@@ -422,8 +454,27 @@ export function applyAction(prev: BattleState, action: Action, actor: string, rn
       hero.castThisRound = true
       events.push({ type: 'cast', heroUid: actor, spellId: action.spellId, target: action.target })
       resolveSpell(state, action.spellId, hero.stats.power, hero.team, action.target, events)
-      // Заклинание не тратит ход юнита, но активный юнит мог погибнуть (Армагеддон)
-      if (!checkEnd(state, events) && !alive(active)) endTurn(state, events)
+      state.timeouts[actor] = 0
+      if (!checkEnd(state, events)) endTurn(state, events)
+      break
+    }
+    case 'hero_strike': {
+      const hero = activeHero(state, action.heroUid, actor)
+      const target = findUnitState(state, action.targetId)
+      if (!alive(target) || target.team === hero.team) throw new IllegalActionError('bad_target')
+      hero.castThisRound = true
+      events.push({ type: 'hero_strike', heroUid: actor, targetId: target.id })
+      applyDamage(state, target, hero.strike, events, null, 'hero')
+      state.timeouts[actor] = 0
+      if (!checkEnd(state, events)) endTurn(state, events)
+      break
+    }
+    case 'hero_pass': {
+      const hero = activeHero(state, action.heroUid, actor)
+      hero.castThisRound = true
+      events.push({ type: 'hero_pass', heroUid: actor })
+      state.timeouts[actor] = 0
+      endTurn(state, events)
       break
     }
     default: {
@@ -467,21 +518,28 @@ export function applyAction(prev: BattleState, action: Action, actor: string, rn
   return { state, events }
 }
 
-/** Ход не сделан вовремя (§5.4): за юнита выполняется Defend; 3 тайм-аута подряд — сдача */
+/**
+ * Ход не сделан вовремя (§5.4): за юнита выполняется Defend, за героя — пропуск хода;
+ * 3 тайм-аута подряд — сдача
+ */
 export function applyTimeout(prev: BattleState, rng: Rng): ActionResult {
-  if (prev.status !== 'active' || !prev.activeUnitId) throw new IllegalActionError('battle_finished')
+  const uid = activeActor(prev)
+  if (prev.status !== 'active' || !uid) throw new IllegalActionError('battle_finished')
   const state = clone(prev)
   const events: BattleEvent[] = []
-  const u = findUnitState(state, state.activeUnitId!)
-  const uid = u.owner
+  const u = state.activeUnitId ? findUnitState(state, state.activeUnitId) : null
   state.timeouts[uid] = (state.timeouts[uid] ?? 0) + 1
-  events.push({ type: 'timeout', heroUid: uid, unitId: u.id })
+  events.push({ type: 'timeout', heroUid: uid, unitId: u?.id ?? null })
   if (state.timeouts[uid]! >= MAX_CONSECUTIVE_TIMEOUTS) {
     surrender(state, uid, events, 'timeout')
     if (state.status === 'active') advance(state, events)
-  } else {
+  } else if (u) {
     u.defending = true
     events.push({ type: 'defend', unitId: u.id })
+    endTurn(state, events)
+  } else {
+    state.heroes[uid]!.castThisRound = true
+    events.push({ type: 'hero_pass', heroUid: uid })
     endTurn(state, events)
   }
   state.seq++

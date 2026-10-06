@@ -74,6 +74,11 @@ function duel(t) {
   }
   let actions = 0
   while (state.status === 'active') {
+    // Герои пропускают свой ход: меряется сила юнитов, а не удары и заклинания героев
+    if (state.activeHeroUid) {
+      state = applyAction(state, { type: 'hero_pass', heroUid: state.activeHeroUid }, state.activeHeroUid, rng).state
+      continue
+    }
     const active = state.units.find((u) => u.id === state.activeUnitId)
     const action = chooseBotAction(state, active.owner, 'normal', rng)
     if (!action) throw new Error('bot returned no action')

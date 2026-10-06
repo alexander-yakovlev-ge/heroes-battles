@@ -12,6 +12,9 @@ export function spellAffects(state: BattleState, spell: SpellTemplate, u: UnitSt
 }
 
 /** Проверка цели для одиночных заклинаний */
+/** Урон «Молнии» от силы магии (§5.7) — используется и в подсказках */
+export const lightningBoltDamage = (power: number) => 10 + Math.max(1, power) * 6
+
 export function isValidSpellTarget(state: BattleState, spellId: SpellId, casterTeam: Team, target: Cell): boolean {
   const spell = getSpell(spellId)
   if (spell.targeting === 'global') return true
@@ -66,7 +69,7 @@ export function resolveSpell(
 
   switch (spellId) {
     case 'lightning_bolt':
-      if (single) damage(state, single, casterTeam, 10 + p * 6, events)
+      if (single) damage(state, single, casterTeam, lightningBoltDamage(p), events)
       break
     case 'cure':
       if (single) {

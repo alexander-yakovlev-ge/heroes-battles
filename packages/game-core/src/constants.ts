@@ -1,7 +1,7 @@
 import type { Mode, Tier, UnitRole } from './types.js'
 
 /** Версия игровых данных (юниты, заклинания, константы). Меняется при любом изменении баланса. */
-export const BALANCE_VERSION = '0.2.0'
+export const BALANCE_VERSION = '0.3.0'
 
 export const MAX_LEVEL = 30
 export const MAX_LEVEL_GAP = 3
@@ -13,6 +13,15 @@ export const MAX_ROUNDS = 30
 export const DRAW_THRESHOLD = 0.05
 export const MAX_CONSECUTIVE_TIMEOUTS = 3
 export const MANA_PER_KNOWLEDGE = 10
+
+/** Инициатива героя (§5.3): середина шкалы юнитов 1–20 — герой ходит раз в раунд */
+export const HERO_INITIATIVE = 10
+/** Удар героя (§5.5): (база + за уровень боя × L) × (1 + 5% за очко атаки героя); без случайности */
+export const HERO_STRIKE_BASE = 3
+export const HERO_STRIKE_PER_LEVEL = 2
+export const HERO_STRIKE_PER_ATTACK = 0.05
+/** Префикс id героя в очереди хода */
+export const HERO_QUEUE_PREFIX = 'hero:'
 
 export const MODE_CONFIG: Record<Mode, { width: number; height: number; stacksPerHero: number; heroesPerTeam: number }> = {
   '1v1': { width: 12, height: 8, stacksPerHero: 7, heroesPerTeam: 1 },

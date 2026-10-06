@@ -17,6 +17,11 @@ import {
   createRng,
   effectiveInitiative,
   getUnit,
+  heroQueueId,
+  heroStrikeDamage,
+  heroUidOf,
+  isHeroQueueId,
+  totalHp,
   movePositions,
   rectCells,
   roleMultiplier,
@@ -53,9 +58,15 @@ describe('создание боя', () => {
         if (u.team === 'red') expect(u.x).toBeLessThan(state.grid.width / 2)
         else expect(u.x).toBeGreaterThanOrEqual(state.grid.width / 2)
       }
-      const inits = state.queue.map((id) => effectiveInitiative(state, unit(state, id)))
+      // В очереди и юниты, и герои (§5.3), по убыванию инициативы
+      const inits = state.queue.map((id) =>
+        isHeroQueueId(id) ? state.heroes[heroUidOf(id)]!.initiative : effectiveInitiative(state, unit(state, id)),
+      )
       for (let i = 1; i < inits.length; i++) expect(inits[i - 1]!).toBeGreaterThanOrEqual(inits[i]!)
-      expect(state.activeUnitId).toBe(state.queue[0])
+      expect(state.queue.filter(isHeroQueueId)).toHaveLength(per * 2)
+      const first = state.queue[0]!
+      if (isHeroQueueId(first)) expect(state.activeHeroUid).toBe(heroUidOf(first))
+      else expect(state.activeUnitId).toBe(first)
     }
   })
 
@@ -377,8 +388,8 @@ describe('ближний бой и способности (§5.6)', () => {
   })
 })
 
-describe('заклинания героя', () => {
-  const withMana = () => {
+describe('ход героя (§5.3)', () => {
+  const withMana = (heroTurn: string | null = 'red') => {
     const red = createHero('red', 'necro', 10)
     const blue = createHero('blue', 'knight', 10)
     return scenario(
@@ -387,22 +398,29 @@ describe('заклинания героя', () => {
         { id: 'e', unit: 'knight_peasant', count: 30, x: 8, y: 0, team: 'blue' },
         { id: 'dragon', unit: 'wizard_arcane_dragon', count: 1, x: 8, y: 4, team: 'blue' },
       ],
-      { heroes: [red, blue], level: 10 },
+      { heroes: [red, blue], level: 10, heroTurn: heroTurn ?? undefined },
     )
   }
 
-  it('каст тратит ману, не тратит ход, один раз за раунд', () => {
+  it('заклинание тратит ману и ход героя; дальше ходит юнит', () => {
     const s = withMana()
     const { state, events } = applyAction(s, { type: 'cast', heroUid: 'red', spellId: 'lightning_bolt', target: { x: 8, y: 0 } }, 'red', rng())
     expect(state.heroes.red!.mana).toBe(s.heroes.red!.mana - 8)
+    expect(state.activeHeroUid).toBeNull()
     expect(state.activeUnitId).toBe('a')
     expect(damageEvents(events, 'spell')).toHaveLength(1)
     expect(() =>
       applyAction(state, { type: 'cast', heroUid: 'red', spellId: 'haste', target: { x: 0, y: 0 } }, 'red', rng()),
-    ).toThrow('already_cast')
+    ).toThrow('not_your_turn')
   })
 
-  it('нельзя: не хватает маны, неверная цель, иммунитет, не свой ход', () => {
+  it('в ход юнита колдовать и бить героем нельзя', () => {
+    const s = withMana(null)
+    expect(() => applyAction(s, { type: 'cast', heroUid: 'red', spellId: 'lightning_bolt', target: { x: 8, y: 0 } }, 'red', rng())).toThrow('not_your_turn')
+    expect(() => applyAction(s, { type: 'hero_strike', heroUid: 'red', targetId: 'e' }, 'red', rng())).toThrow('not_your_turn')
+  })
+
+  it('нельзя: не хватает маны, неверная цель, иммунитет, чужой герой', () => {
     const s = withMana()
     s.heroes.red!.mana = 5
     expect(() => applyAction(s, { type: 'cast', heroUid: 'red', spellId: 'lightning_bolt', target: { x: 8, y: 0 } }, 'red', rng())).toThrow('no_mana')
@@ -410,6 +428,7 @@ describe('заклинания героя', () => {
     expect(() => applyAction(s, { type: 'cast', heroUid: 'red', spellId: 'lightning_bolt', target: { x: 0, y: 0 } }, 'red', rng())).toThrow('bad_target')
     expect(() => applyAction(s, { type: 'cast', heroUid: 'red', spellId: 'lightning_bolt', target: { x: 8, y: 4 } }, 'red', rng())).toThrow('bad_target')
     expect(() => applyAction(s, { type: 'cast', heroUid: 'blue', spellId: 'cure', target: { x: 8, y: 0 } }, 'blue', rng())).toThrow('not_your_turn')
+    expect(() => applyAction(s, { type: 'hero_strike', heroUid: 'red', targetId: 'a' }, 'red', rng())).toThrow('bad_target')
   })
 
   it('баф действует 3 раунда и влияет на инициативу', () => {
@@ -418,6 +437,42 @@ describe('заклинания героя', () => {
     const a = unit(state, 'a')
     expect(effectiveInitiative(state, a)).toBe(getUnit('necro_skeleton').initiative + 3)
     expect(a.effects).toEqual([{ id: 'haste', roundsLeft: 3 }])
+  })
+
+  it('удар героя: урон по формуле (3 + 2·L)·(1 + 5%·атака), без случайности', () => {
+    const s = withMana()
+    const hero = s.heroes.red!
+    expect(hero.strike).toBe(heroStrikeDamage(10, hero.stats.attack))
+    expect(heroStrikeDamage(10, 1)).toBe(Math.floor(23 * 1.05))
+    const before = unit(s, 'e')
+    const { state, events } = applyAction(s, { type: 'hero_strike', heroUid: 'red', targetId: 'e' }, 'red', rng())
+    expect(damageEvents(events, 'hero')).toEqual([expect.objectContaining({ targetId: 'e', damage: hero.strike, sourceId: null })])
+    expect(totalHp(unit(state, 'e'))).toBe(totalHp(before) - hero.strike)
+    expect(state.activeUnitId).toBe('a')
+  })
+
+  it('пропуск хода героя; тайм-аут в ход героя — пропуск', () => {
+    const s = withMana()
+    const passed = applyAction(s, { type: 'hero_pass', heroUid: 'red' }, 'red', rng())
+    expect(passed.events.map((e) => e.type)).toContain('hero_pass')
+    expect(passed.state.activeUnitId).toBe('a')
+    const timedOut = applyTimeout(s, rng())
+    expect(timedOut.events.map((e) => e.type)).toEqual(expect.arrayContaining(['timeout', 'hero_pass']))
+    expect(timedOut.state.timeouts.red).toBe(1)
+    expect(timedOut.state.activeUnitId).toBe('a')
+  })
+
+  it('герой встаёт в очередь каждый раунд по своей инициативе', () => {
+    const s = withMana(null)
+    s.queue = ['a']
+    s.activeUnitId = 'a'
+    const { state } = applyAction(s, { type: 'defend', unitId: 'a' }, 'red', rng())
+    // Новый раунд: очередь пересобрана с героями
+    expect(state.round).toBe(2)
+    expect(state.queue).toEqual(expect.arrayContaining([heroQueueId('red'), heroQueueId('blue')]))
+    const heroInit = state.heroes.red!.initiative
+    const order = state.queue.map((id) => (isHeroQueueId(id) ? heroInit : effectiveInitiative(state, unit(state, id))))
+    expect([...order].sort((x, y) => y - x)).toEqual(order)
   })
 })
 

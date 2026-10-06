@@ -120,12 +120,12 @@ export const POWER_CALIBRATION: Readonly<Record<string, number>> = {
  * Подбирается скриптом scripts/balance.mjs.
  */
 export const RACE_POWER_CALIBRATION: Readonly<Partial<Record<RaceId, number>>> = {
-  knight: 1.027,
-  necro: 0.976,
-  wizard: 1.015,
-  elf: 0.982,
+  knight: 1.036,
+  necro: 0.987,
+  wizard: 1.042,
+  elf: 0.969,
   barbarian: 1.034,
-  demon: 0.983,
-  dungeon: 0.98,
-  fortress: 1.011,
+  demon: 0.958,
+  dungeon: 0.968,
+  fortress: 1.014,
 }

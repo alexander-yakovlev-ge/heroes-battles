@@ -77,6 +77,14 @@ export function formatEvent(t: T, state: BattleState, ev: BattleEvent, heroNames
       const u = unit(ev.unitId)
       return { text: t('log.skip_turn', { unit: u.name }), team: u.team }
     }
+    case 'hero_strike': {
+      const h = hero(ev.heroUid)
+      return { text: t('log.hero_strike', { hero: h.name, target: unit(ev.targetId).name }), team: h.team }
+    }
+    case 'hero_pass': {
+      const h = hero(ev.heroUid)
+      return { text: t('log.hero_pass', { hero: h.name }), team: h.team }
+    }
     case 'surrender': {
       const h = hero(ev.heroUid)
       return { text: t('log.surrender', { hero: h.name }), team: h.team }

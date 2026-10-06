@@ -181,6 +181,11 @@ export interface BattleHero {
   spells: SpellId[]
   mana: number
   maxMana: number
+  /** Инициатива героя: герой ходит в общей очереди наравне с юнитами (§5.3) */
+  initiative: number
+  /** Сила удара героя на уровне боя (§5.5) */
+  strike: number
+  /** Герой уже сделал ход в этом раунде (заклинание, удар или пропуск) */
   castThisRound: boolean
   surrendered: boolean
 }
@@ -208,9 +213,11 @@ export interface BattleState {
   heroes: Record<string, BattleHero>
   grid: Grid
   units: UnitState[]
-  /** Очередь текущего раунда; queue[0] — активный юнит */
+  /** Очередь текущего раунда: id юнитов и героев (heroQueueId); queue[0] — тот, кто ходит */
   queue: string[]
+  /** Ходит юнит — его id; ходит герой — null, а uid героя в activeHeroUid */
   activeUnitId: string | null
+  activeHeroUid: string | null
   round: number
   seq: number
   /** Подряд пропущенные по тайм-ауту ходы игрока */
@@ -227,11 +234,16 @@ export type Action =
   | { type: 'defend'; unitId: string }
   | { type: 'ability'; unitId: string; targetId: string }
   | { type: 'cast'; heroUid: string; spellId: SpellId; target: Cell }
+  | { type: 'hero_strike'; heroUid: string; targetId: string }
+  | { type: 'hero_pass'; heroUid: string }
   | { type: 'surrender'; heroUid: string }
 
 export type BattleEvent =
   | { type: 'round_start'; round: number }
   | { type: 'turn_start'; unitId: string }
+  | { type: 'hero_turn'; heroUid: string }
+  | { type: 'hero_strike'; heroUid: string; targetId: string }
+  | { type: 'hero_pass'; heroUid: string }
   | { type: 'skip_turn'; unitId: string; reason: 'blind' | 'petrified' }
   | { type: 'move'; unitId: string; from: Cell; to: Cell }
   | {
@@ -240,7 +252,7 @@ export type BattleEvent =
       targetId: string
       damage: number
       kills: number
-      kind: 'melee' | 'ranged' | 'retaliation' | 'spell' | 'ability' | 'poison' | 'aura'
+      kind: 'melee' | 'ranged' | 'retaliation' | 'spell' | 'ability' | 'poison' | 'aura' | 'hero'
     }
   | { type: 'evade'; sourceId: string; targetId: string }
   | { type: 'heal'; targetId: string; hp: number; raised: number }
@@ -254,5 +266,5 @@ export type BattleEvent =
   | { type: 'ability'; unitId: string; spellId: SpellId; targetId: string }
   | { type: 'mana_drain'; heroUid: string; amount: number }
   | { type: 'surrender'; heroUid: string }
-  | { type: 'timeout'; heroUid: string; unitId: string }
+  | { type: 'timeout'; heroUid: string; unitId: string | null }
   | { type: 'battle_end'; winner: Team | 'draw'; reason: BattleEndReason }

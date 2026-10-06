@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { createHero, getUnit, maxWeight, splitStack, type Hero } from '@hb/game-core'
+import { createHero, forecastAction, getUnit, maxWeight, splitStack, type Hero } from '@hb/game-core'
 import {
+  NO_MODE,
   activeUnit,
+  aimedAction,
   applyPlayerAction,
   attackCells,
   botStep,
   defaultAttack,
+  isPlayerHeroTurn,
   isPlayerTurn,
   playerOptions,
   prepareBotBattle,
@@ -19,17 +22,27 @@ import { addUnit, maxCountAt, validate, weightOf } from '../src/features/castle/
 import { buildSteps, lastHitIndex, playheadAt, totalDuration, unitOpacity, visualPosition } from '../src/features/battle/animation'
 
 const hero: Hero = createHero('player', 'necro', 5)
-const noMode = { spell: null, attackTarget: null }
+const noMode = NO_MODE
 const army = [
   { unitId: 'necro_skeleton', count: 20 },
   { unitId: 'necro_ghost', count: 5 },
   { unitId: 'necro_zombie', count: 6 },
 ]
 
-/** Довести бой до хода игрока, делая ходы бота */
+/** Довести бой до хода юнита игрока: ходит бот, герой игрока пропускает ход */
 function untilPlayer(battle: BotBattle) {
-  for (let i = 0; i < 200 && battle.state.status === 'active' && !isPlayerTurn(battle); i++) {
-    battle.state = botStep(battle)!.state
+  for (let i = 0; i < 400 && battle.state.status === 'active'; i++) {
+    if (isPlayerHeroTurn(battle)) battle.state = applyPlayerAction(battle, playerOptions(battle).heroPass!).state
+    else if (!isPlayerTurn(battle)) battle.state = botStep(battle)!.state
+    else return
+  }
+}
+
+/** Довести бой до хода героя игрока */
+function untilPlayerHero(battle: BotBattle) {
+  for (let i = 0; i < 400 && battle.state.status === 'active' && !isPlayerHeroTurn(battle); i++) {
+    if (isPlayerTurn(battle)) battle.state = applyPlayerAction(battle, playerOptions(battle).defend!).state
+    else battle.state = botStep(battle)!.state
   }
 }
 
@@ -64,7 +77,7 @@ describe('бой с ботом: контроллер', () => {
     expect([moved.x, moved.y]).toEqual([x, y])
   })
 
-  it('атака ближнего боя: игрок выбирает клетку, с которой бить', () => {
+  it('атака в два нажатия: прицел, затем удар по цели или с выбранной клетки', () => {
     const { battle } = start('easy', 3)
     for (let guard = 0; guard < 300 && battle.state.status === 'active'; guard++) {
       untilPlayer(battle)
@@ -74,9 +87,9 @@ describe('бой с ботом: контроллер', () => {
         const [targetId, list] = entry
         const target = battle.state.units.find((u) => u.id === targetId)!
         const onTarget = { x: target.x + 0.5, y: target.y + 0.5 }
-        // Первое нажатие на цель — выбор клетки атаки
-        expect(resolveTap(battle, opts, onTarget, noMode)).toEqual({ kind: 'chooseAttack', targetId })
-        const mode = { spell: null, attackTarget: targetId }
+        // Первое нажатие на цель — прицел
+        expect(resolveTap(battle, opts, onTarget, noMode)).toEqual({ kind: 'aim', targetId })
+        const mode = { ...NO_MODE, aim: targetId }
         // Каждая подсвеченная клетка ведёт к атаке именно с неё
         expect(attackCells(battle, opts, targetId).size).toBeGreaterThanOrEqual(list.length)
         for (const a of list) {
@@ -84,6 +97,7 @@ describe('бой с ботом: контроллер', () => {
         }
         // Повторное нажатие на цель — удар с клетки по умолчанию (ближайшей к юниту)
         expect(resolveTap(battle, opts, onTarget, mode)).toEqual({ kind: 'action', action: defaultAttack(battle, list) })
+        expect(aimedAction(battle, opts, targetId, false)).toEqual(defaultAttack(battle, list))
         return
       }
       battle.state = applyPlayerAction(battle, opts.defend!).state
@@ -93,8 +107,9 @@ describe('бой с ботом: контроллер', () => {
 
   it('бой доигрывается до конца, если игрок только защищается', () => {
     const { battle } = start('normal', 11)
-    for (let i = 0; i < 2000 && battle.state.status === 'active'; i++) {
-      if (isPlayerTurn(battle)) battle.state = applyPlayerAction(battle, playerOptions(battle).defend!).state
+    for (let i = 0; i < 3000 && battle.state.status === 'active'; i++) {
+      if (isPlayerHeroTurn(battle)) battle.state = applyPlayerAction(battle, playerOptions(battle).heroPass!).state
+      else if (isPlayerTurn(battle)) battle.state = applyPlayerAction(battle, playerOptions(battle).defend!).state
       else battle.state = botStep(battle)!.state
     }
     expect(battle.state.status).toBe('finished')
@@ -116,6 +131,43 @@ describe('бой с ботом: контроллер', () => {
     if (big) expect(unitAt(battle.state, { x: big.x + 1, y: big.y + 1 })?.id).toBe(big.id)
     const small = battle.state.units.find((u) => getUnit(u.templateId).size === 1)!
     expect(unitAt(battle.state, { x: small.x, y: small.y })?.id).toBe(small.id)
+  })
+})
+
+describe('ход героя', () => {
+  it('герой в очереди; удар героя — в два нажатия по врагу, урон из прогноза', () => {
+    const { battle } = start('easy', 31)
+    expect(battle.state.queue.some((id) => id === 'hero:player') || battle.state.activeHeroUid === 'player').toBe(true)
+    untilPlayerHero(battle)
+    const opts = playerOptions(battle)
+    expect(opts.defend).toBeNull()
+    expect(opts.heroPass).not.toBeNull()
+    const [targetId, strike] = [...opts.heroStrikes.entries()][0]!
+    const target = battle.state.units.find((u) => u.id === targetId)!
+    const tap = { x: target.x + 0.5, y: target.y + 0.5 }
+    const mode = { ...NO_MODE, heroStrike: true }
+    expect(resolveTap(battle, opts, tap, mode)).toEqual({ kind: 'aim', targetId })
+    expect(resolveTap(battle, opts, tap, { ...mode, aim: targetId })).toEqual({ kind: 'action', action: strike })
+    // Без выбора «удар» нажатие на врага в ход героя ничего не делает
+    expect(resolveTap(battle, opts, tap, NO_MODE).kind).toBe('none')
+    const forecast = forecastAction(battle.state, strike)!
+    const { events } = applyPlayerAction(battle, strike)
+    const dmg = events.find((e) => e.type === 'damage' && e.targetId === targetId)
+    expect(dmg && 'damage' in dmg && dmg.damage).toBe(forecast.min)
+  })
+
+  it('заклинание — только в ход героя: выбор заклинания, затем цель', () => {
+    const lvl10 = createHero('player', 'necro', 10)
+    const prep = prepareBotBattle(lvl10, army, 'easy', 41)
+    const { battle } = startBotBattle(prep, prep.playerArmy)
+    untilPlayer(battle)
+    expect(playerOptions(battle).casts.size).toBe(0)
+    untilPlayerHero(battle)
+    const opts = playerOptions(battle)
+    const bolts = opts.casts.get('lightning_bolt')!
+    const [cellKey, cast] = [...bolts.entries()][0]!
+    const [x, y] = cellKey.split(',').map(Number) as [number, number]
+    expect(resolveTap(battle, opts, { x: x + 0.5, y: y + 0.5 }, { ...NO_MODE, spell: 'lightning_bolt' })).toEqual({ kind: 'action', action: cast })
   })
 })
 
