@@ -3,6 +3,8 @@ import {
   DEPLOY_COLUMNS,
   IllegalActionError,
   MODE_CONFIG,
+  ROLE_ADVANTAGE,
+  UNITS,
   allocateStat,
   applyAction,
   applyTimeout,
@@ -17,6 +19,7 @@ import {
   getUnit,
   movePositions,
   rectCells,
+  roleMultiplier,
   type BattleEvent,
   type BattleState,
   type Mode,
@@ -196,6 +199,37 @@ describe('урон (§5.5)', () => {
     const dFar = computeDamage(free, unit(free, 'ar'), unit(free, 'e3'), { kind: 'ranged' }, null)
     expect(dNear).toBeCloseTo(dFree / 2)
     expect(dFar).toBeCloseTo(dFree / 2)
+  })
+
+  it('треугольник ролей: стрелки > тяжёлые > мобильные > стрелки', () => {
+    const s = scenario([
+      { id: 'sh', unit: 'necro_skeleton_archer', count: 10, x: 0, y: 0 },
+      { id: 'hv', unit: 'necro_skeleton', count: 10, x: 5, y: 0, team: 'blue' },
+      { id: 'mb', unit: 'necro_ghost', count: 10, x: 9, y: 0, team: 'blue' },
+    ])
+    const [sh, hv, mb] = ['sh', 'hv', 'mb'].map((id) => unit(s, id))
+    expect(roleMultiplier(sh!, hv!)).toBe(1 + ROLE_ADVANTAGE.shooter.bonus)
+    expect(roleMultiplier(hv!, mb!)).toBe(1 + ROLE_ADVANTAGE.heavy.bonus)
+    expect(roleMultiplier(mb!, sh!)).toBe(1 + ROLE_ADVANTAGE.mobile.bonus)
+    for (const [a, b] of [[hv, sh], [mb, hv], [sh, mb], [hv, hv]] as const) expect(roleMultiplier(a!, b!)).toBe(1)
+
+    // Множитель входит в урон удара
+    const withRole = computeDamage(s, hv!, mb!, { kind: 'melee' }, null)
+    const saved = ROLE_ADVANTAGE.heavy.bonus
+    ROLE_ADVANTAGE.heavy.bonus = 0
+    try {
+      expect(withRole / computeDamage(s, hv!, mb!, { kind: 'melee' }, null)).toBeCloseTo(1 + saved)
+    } finally {
+      ROLE_ADVANTAGE.heavy.bonus = saved
+    }
+  })
+
+  it('роль юнита: стрелки — shooter, летающие нестрелки — mobile', () => {
+    for (const u of UNITS) {
+      if (u.ranged) expect(u.role, u.id).toBe('shooter')
+      else if (u.isFlying) expect(u.role, u.id).toBe('mobile')
+      else expect(['heavy', 'mobile'], u.id).toContain(u.role)
+    }
   })
 
   it('выстрел тратит боезапас и не вызывает ответного удара', () => {

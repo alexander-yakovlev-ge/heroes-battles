@@ -1,7 +1,7 @@
-import type { Mode, Tier } from './types.js'
+import type { Mode, Tier, UnitRole } from './types.js'
 
 /** Версия игровых данных (юниты, заклинания, константы). Меняется при любом изменении баланса. */
-export const BALANCE_VERSION = '0.1.0'
+export const BALANCE_VERSION = '0.2.0'
 
 export const MAX_LEVEL = 30
 export const MAX_LEVEL_GAP = 3
@@ -65,3 +65,14 @@ export const POISON_RATIO = 0.2
 export const REBIRTH_RATIO = 0.3
 export const FIRE_AURA_RATIO = 0.25
 export const MANA_DRAIN_PER_HIT = 2
+
+/**
+ * Треугольник ролей: роль-ключ получает бонус урона против роли `beats` (§5.6).
+ * Бонус тяжёлых меньше: стрелков в армиях меньше, и при равных бонусах нейтральной
+ * была бы армия с долей стрелков 1/3, а не типичная ~1/4.
+ */
+export const ROLE_ADVANTAGE: Record<UnitRole, { beats: UnitRole; bonus: number }> = {
+  shooter: { beats: 'heavy', bonus: 1 },
+  heavy: { beats: 'mobile', bonus: 0.7 },
+  mobile: { beats: 'shooter', bonus: 1 },
+}

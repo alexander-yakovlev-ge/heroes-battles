@@ -8,6 +8,7 @@ import {
   PROC_CHANCE,
   RANGED_PENALTY,
   REBIRTH_RATIO,
+  ROLE_ADVANTAGE,
 } from '../constants.js'
 import { rectDistance, rectsAdjacent, type Rect } from '../grid.js'
 import type { Rng } from '../rng.js'
@@ -33,6 +34,12 @@ export interface DamageOptions {
   kind: StrikeKind
   /** Клеток пройдено перед атакой (для charge) */
   chargeCells?: number
+}
+
+/** Множитель треугольника ролей: бонус, если роль атакующего бьёт роль цели */
+export function roleMultiplier(attacker: UnitState, target: UnitState): number {
+  const adv = ROLE_ADVANTAGE[tmpl(attacker).role]
+  return adv.beats === tmpl(target).role ? 1 + adv.bonus : 1
 }
 
 export const attackMultiplier = (diff: number) =>
@@ -71,6 +78,7 @@ export function computeDamage(
     else mods *= 1 + PROC_CHANCE
   }
   if (hasEffect(attacker, 'confusion')) mods *= 0.5
+  mods *= roleMultiplier(attacker, target)
   const dmg = base * attackMultiplier(diff) * mods
   return rng ? Math.max(1, Math.floor(dmg)) : dmg
 }

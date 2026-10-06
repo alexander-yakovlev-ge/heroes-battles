@@ -1,31 +1,15 @@
-import type { AbilityId, RaceId, SpellId, Tier, UnitTemplate } from '../types.js'
-import { unitPower, weightFromPower } from './power.js'
+import type { AbilityId, RaceId, SpellId, Tier, UnitRole, UnitTemplate } from '../types.js'
+import { TIER_BASELINE } from './baseline.js'
+import { POWER_CALIBRATION, RACE_POWER_CALIBRATION } from './calibration.js'
+import { DEF_SHARE, unitPower, weightFromPower } from './power.js'
+
+export { TIER_BASELINE }
 
 /**
  * Стартовые характеристики юнитов (§4.1 ТЗ).
  * Юнит = базовая линия уровня + роль (модификаторы). Вес вычисляется из «силы»,
  * альтернативный юнит нормализуется к силе базового — так соблюдается правило ±10%.
  */
-
-interface TierBaseline {
-  attack: number
-  defense: number
-  damageMin: number
-  damageMax: number
-  health: number
-  speed: number
-  initiative: number
-}
-
-export const TIER_BASELINE: Record<Tier, TierBaseline> = {
-  1: { attack: 2, defense: 2, damageMin: 1, damageMax: 2, health: 6, speed: 4, initiative: 10 },
-  2: { attack: 4, defense: 4, damageMin: 2, damageMax: 4, health: 12, speed: 4, initiative: 10 },
-  3: { attack: 6, defense: 6, damageMin: 4, damageMax: 6, health: 24, speed: 5, initiative: 10 },
-  4: { attack: 9, defense: 9, damageMin: 7, damageMax: 11, health: 45, speed: 5, initiative: 10 },
-  5: { attack: 12, defense: 12, damageMin: 13, damageMax: 18, health: 80, speed: 5, initiative: 10 },
-  6: { attack: 16, defense: 16, damageMin: 22, damageMax: 32, health: 140, speed: 6, initiative: 10 },
-  7: { attack: 21, defense: 21, damageMin: 38, damageMax: 55, health: 250, speed: 6, initiative: 10 },
-}
 
 interface UnitSpec {
   slug: string
@@ -34,6 +18,8 @@ interface UnitSpec {
   large?: boolean
   abilities?: AbilityId[]
   casterSpells?: SpellId[]
+  /** Роль нестрелка; по умолчанию летающий — mobile, наземный — heavy. Стрелок всегда shooter */
+  role?: Exclude<UnitRole, 'shooter'>
   /** Аддитивные поправки к атаке/защите/скорости/инициативе, мультипликативные — к урону и HP */
   mod?: { atk?: number; def?: number; dmg?: number; hp?: number; spd?: number; init?: number }
 }
@@ -81,6 +67,7 @@ function build(raceId: RaceId, tier: Tier, variant: 'base' | 'alt', spec: UnitSp
     initiative: Math.max(1, Math.min(20, b.initiative + (m.init ?? 0))),
     weight: 0,
     isFlying: spec.flying ?? false,
+    role: spec.ranged ? 'shooter' : (spec.role ?? (spec.flying ? 'mobile' : 'heavy')),
     abilities: [...new Set([...(spec.abilities ?? []), ...raceAbilities])],
   }
   if (unit.damageMax < unit.damageMin) unit.damageMax = unit.damageMin
@@ -89,12 +76,16 @@ function build(raceId: RaceId, tier: Tier, variant: 'base' | 'alt', spec: UnitSp
   return unit
 }
 
+/** Сила с поправкой по статистике боёв (§13): из неё считается вес */
+export const calibratedPower = (u: UnitTemplate) =>
+  unitPower(u) * (POWER_CALIBRATION[u.id] ?? 1) * (RACE_POWER_CALIBRATION[u.raceId] ?? 1)
+
 /** Подгоняет урон и HP альтернативного юнита так, чтобы его сила совпала с базовым */
 function normalizeTo(alt: UnitTemplate, base: UnitTemplate): UnitTemplate {
-  const target = unitPower(base)
+  const target = calibratedPower(base)
   let result = alt
   for (let i = 0; i < 4; i++) {
-    const ratio = target / unitPower(result)
+    const ratio = target / calibratedPower(result)
     if (Math.abs(ratio - 1) < 0.03) break
     const k = Math.sqrt(ratio)
     const damageMin = Math.max(1, Math.round(result.damageMin * k))
@@ -105,12 +96,19 @@ function normalizeTo(alt: UnitTemplate, base: UnitTemplate): UnitTemplate {
       health: Math.max(1, Math.round(result.health * k)),
     }
   }
-  // Урон малых юнитов округляется грубо — досогласуем силу через HP (сила ∝ √HP)
+  // Урон малых юнитов округляется грубо — досогласуем силу через HP
   for (let i = 0; i < 4; i++) {
-    const ratio = target / unitPower(result)
+    const ratio = target / calibratedPower(result)
     if (Math.abs(ratio - 1) < 0.03) break
-    result = { ...result, health: Math.max(1, Math.round(result.health * ratio * ratio)) }
+    result = { ...result, health: Math.max(1, Math.round(result.health * ratio ** (1 / DEF_SHARE))) }
   }
+  // У юнитов 1-го уровня шаг HP слишком крупный — последняя подстройка защитой
+  let best = result
+  for (let d = -3; d <= 3 && Math.abs(target / calibratedPower(result) - 1) >= 0.03; d++) {
+    const candidate = { ...result, defense: Math.max(0, result.defense + d) }
+    if (Math.abs(target / calibratedPower(candidate) - 1) < Math.abs(target / calibratedPower(best) - 1)) best = candidate
+  }
+  result = best
   return result
 }
 
@@ -120,7 +118,7 @@ function race(raceId: RaceId, roster: RaceRoster, raceAbilities: AbilityId[] = [
     const [baseSpec, altSpec] = roster[tier]
     const base = build(raceId, tier, 'base', baseSpec, raceAbilities)
     const alt = normalizeTo(build(raceId, tier, 'alt', altSpec, raceAbilities), base)
-    base.weight = weightFromPower(unitPower(base))
+    base.weight = weightFromPower(calibratedPower(base))
     alt.weight = base.weight
     out.push(base, alt)
   }
@@ -152,7 +150,7 @@ const necro = race(
     1: [{ slug: 'skeleton', mod: { hp: 0.9 } }, { slug: 'skeleton_archer', ranged: true }],
     2: [
       { slug: 'zombie', mod: { atk: -1, hp: 1.5, spd: -1, init: -2 } },
-      { slug: 'ghoul', abilities: ['poison'], mod: { hp: 0.85, spd: 1, init: 1 } },
+      { slug: 'ghoul', role: 'mobile', abilities: ['poison'], mod: { hp: 0.85, spd: 1, init: 1 } },
     ],
     3: [
       { slug: 'ghost', flying: true, abilities: ['incorporeal'], mod: { hp: 0.8 } },
@@ -164,7 +162,7 @@ const necro = race(
     ],
     5: [
       { slug: 'lich', ranged: true, abilities: ['area_attack'] },
-      { slug: 'death_knight', large: true, abilities: ['charge', 'deadly_strike'] },
+      { slug: 'death_knight', role: 'mobile', large: true, abilities: ['charge', 'deadly_strike'] },
     ],
     6: [
       { slug: 'abomination', large: true, abilities: ['poison'], mod: { hp: 1.3, spd: -1 } },
@@ -182,7 +180,7 @@ const wizard = race('wizard', {
   1: [{ slug: 'gremlin', ranged: true }, { slug: 'brass_sentry', mod: { def: 3, hp: 1.1, spd: -1 } }],
   2: [
     { slug: 'gargoyle', flying: true, abilities: ['poison_immune'] },
-    { slug: 'stone_hound', mod: { spd: 2, init: 2 } },
+    { slug: 'stone_hound', role: 'mobile', mod: { spd: 2, init: 2 } },
   ],
   3: [
     { slug: 'iron_golem', abilities: ['magic_resist'], mod: { hp: 1.2, spd: -1, init: -1 } },
@@ -209,7 +207,7 @@ const wizard = race('wizard', {
 const elf = race('elf', {
   1: [
     { slug: 'sprite', flying: true, abilities: ['no_retaliation'], mod: { hp: 0.8 } },
-    { slug: 'wood_scout', mod: { spd: 2, init: 2 } },
+    { slug: 'wood_scout', role: 'mobile', mod: { spd: 2, init: 2 } },
   ],
   2: [
     { slug: 'elven_archer', ranged: true, abilities: ['double_attack'], mod: { dmg: 0.6 } },
@@ -217,10 +215,10 @@ const elf = race('elf', {
   ],
   3: [
     { slug: 'druid', ranged: true, abilities: ['no_melee_penalty'] },
-    { slug: 'dire_wolf', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
+    { slug: 'dire_wolf', role: 'mobile', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
   ],
   4: [
-    { slug: 'unicorn', large: true, abilities: ['aura_magic_resist'] },
+    { slug: 'unicorn', role: 'mobile', large: true, abilities: ['aura_magic_resist'], mod: { spd: 1 } },
     { slug: 'centaur', ranged: true, mod: { spd: 2 } },
   ],
   5: [
@@ -243,7 +241,7 @@ const barbarian = race('barbarian', {
     { slug: 'goblin_spearthrower', ranged: { shots: 6 } },
   ],
   2: [
-    { slug: 'wolf_rider', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
+    { slug: 'wolf_rider', role: 'mobile', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
     { slug: 'orc_warrior', mod: { def: 2, hp: 1.3 } },
   ],
   3: [{ slug: 'orc_axe_thrower', ranged: true }, { slug: 'berserker', mod: { atk: 4, def: -3 } }],
@@ -266,15 +264,15 @@ const barbarian = race('barbarian', {
 })
 
 const demon = race('demon', {
-  1: [{ slug: 'imp', mod: { hp: 0.8, spd: 2, init: 2 } }, { slug: 'familiar', abilities: ['mana_drain'] }],
+  1: [{ slug: 'imp', role: 'mobile', mod: { hp: 0.8, spd: 2, init: 2 } }, { slug: 'familiar', role: 'mobile', abilities: ['mana_drain'], mod: { spd: 1 } }],
   2: [
-    { slug: 'hellhound', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
+    { slug: 'hellhound', role: 'mobile', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 2 } },
     { slug: 'horned_demon', mod: { def: 2, hp: 1.3 } },
   ],
-  3: [{ slug: 'succubus', ranged: true }, { slug: 'flame_lasher', abilities: ['no_retaliation'] }],
+  3: [{ slug: 'succubus', ranged: true }, { slug: 'flame_lasher', role: 'mobile', abilities: ['no_retaliation'], mod: { spd: 1 } }],
   4: [
-    { slug: 'nightmare', large: true, abilities: ['charge'], mod: { spd: 2 } },
-    { slug: 'cerberus', abilities: ['area_attack'] },
+    { slug: 'nightmare', role: 'mobile', large: true, abilities: ['charge'], mod: { spd: 2 } },
+    { slug: 'cerberus', role: 'mobile', abilities: ['area_attack'], mod: { spd: 1 } },
   ],
   5: [
     { slug: 'infernal_fiend', abilities: ['fire_aura'] },
@@ -285,24 +283,24 @@ const demon = race('demon', {
     { slug: 'lava_brute', large: true, abilities: ['fire_immune'], mod: { hp: 1.3 } },
   ],
   7: [
-    { slug: 'archfiend', large: true, abilities: ['teleport', 'no_retaliation'] },
+    { slug: 'archfiend', role: 'mobile', large: true, abilities: ['teleport', 'no_retaliation'] },
     { slug: 'doom_lord', large: true, abilities: ['area_attack', 'fire_immune'] },
   ],
 })
 
 const dungeon = race('dungeon', {
-  1: [{ slug: 'troglodyte', abilities: ['blind_immune'] }, { slug: 'cave_spider', abilities: ['poison'] }],
+  1: [{ slug: 'troglodyte', abilities: ['blind_immune'] }, { slug: 'cave_spider', role: 'mobile', abilities: ['poison'], mod: { spd: 1 } }],
   2: [
     { slug: 'harpy', flying: true, abilities: ['return_strike'], mod: { spd: 2 } },
     { slug: 'dark_scout', ranged: true },
   ],
   3: [
     { slug: 'shadow_crossbowman', ranged: true },
-    { slug: 'assassin', abilities: ['double_attack'], mod: { dmg: 0.6, init: 2 } },
+    { slug: 'assassin', role: 'mobile', abilities: ['double_attack'], mod: { dmg: 0.6, spd: 1, init: 2 } },
   ],
   4: [
     { slug: 'medusa', ranged: true, abilities: ['petrify'] },
-    { slug: 'lizard_rider', abilities: ['charge'], mod: { spd: 2 } },
+    { slug: 'lizard_rider', role: 'mobile', abilities: ['charge'], mod: { spd: 2 } },
   ],
   5: [
     { slug: 'minotaur', mod: { atk: 3 } },
@@ -321,7 +319,7 @@ const dungeon = race('dungeon', {
 const fortress = race('fortress', {
   1: [{ slug: 'dwarf_defender', mod: { def: 3, spd: -1 } }, { slug: 'hammer_hurler', ranged: true }],
   2: [
-    { slug: 'boar_rider', abilities: ['charge'], mod: { spd: 2 } },
+    { slug: 'boar_rider', role: 'mobile', abilities: ['charge'], mod: { spd: 2 } },
     { slug: 'shieldbearer', abilities: ['aura_defense'], mod: { def: 2 } },
   ],
   3: [

@@ -4,6 +4,7 @@ import {
   SPELLS,
   TIER_BASELINE,
   UNITS,
+  calibratedPower,
   getAvailableSpells,
   getUnit,
   unitPower,
@@ -30,7 +31,7 @@ describe('юниты (§4.1)', () => {
       for (const tier of tiers) {
         const base = UNITS.find((u) => u.raceId === race && u.tier === tier && u.variant === 'base')!
         const alt = UNITS.find((u) => u.raceId === race && u.tier === tier && u.variant === 'alt')!
-        const ratio = unitPower(alt) / unitPower(base)
+        const ratio = calibratedPower(alt) / calibratedPower(base)
         expect(ratio, `${alt.id} vs ${base.id}`).toBeGreaterThan(0.9)
         expect(ratio, `${alt.id} vs ${base.id}`).toBeLessThan(1.1)
         expect(alt.weight).toBe(base.weight)
@@ -40,7 +41,7 @@ describe('юниты (§4.1)', () => {
 
   it('сила базовой линии растёт в 1.8–2.2 раза за уровень', () => {
     const power = (t: Tier) =>
-      unitPower({ ...TIER_BASELINE[t], isFlying: false, abilities: [], size: 1 })
+      unitPower({ ...TIER_BASELINE[t], tier: t, isFlying: false, abilities: [], size: 1 })
     for (let t = 2; t <= 7; t++) {
       const ratio = power(t as Tier) / power((t - 1) as Tier)
       expect(ratio, `tier ${t}`).toBeGreaterThanOrEqual(1.8)
@@ -49,7 +50,7 @@ describe('юниты (§4.1)', () => {
   })
 
   it('вес пропорционален силе, и сила в среднем растёт с уровнем у каждой расы', () => {
-    for (const u of UNITS) expect(u.weight / unitPower(u)).toBeCloseTo(1 / 3.3, 1)
+    for (const u of UNITS) expect(u.weight / calibratedPower(u)).toBeCloseTo(1 / 3.3, 1)
     for (const race of RACES) {
       for (let t = 2; t <= 7; t++) {
         const prev = UNITS.find((u) => u.raceId === race && u.tier === t - 1 && u.variant === 'base')!

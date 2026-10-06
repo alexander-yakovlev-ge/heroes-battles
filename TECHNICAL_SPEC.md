@@ -193,7 +193,7 @@ packages/
 
 Состав юнитов утверждён владельцем продукта; числовые характеристики подбираются по правилам ниже.
 
-Обозначения: **С** — стрелок, **Л** — летающий, **К** — крупный (2×2). Способности — §5.6.
+Обозначения: **С** — стрелок, **Л** — летающий, **К** — крупный (2×2), **Б** — наземный мобильный юнит (роль `mobile`, §5.6). Способности — §5.6.
 
 #### Рыцари (`knight`) — дисциплина, защита союзников, лечение
 | Ур. | Базовый | Альтернативный |
@@ -210,10 +210,10 @@ packages/
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Skeleton — дешёвый, много в стаке | Skeleton Archer (С) |
-| 2 | Zombie — медленный, много HP | Ghoul — быстрый, `poison` |
+| 2 | Zombie — медленный, много HP | Ghoul (Б) — быстрый, `poison` |
 | 3 | Ghost (Л) — `incorporeal` | Banshee (Л) — `initiative_drain` |
 | 4 | Vampire (Л) — `life_drain`, `no_retaliation` | Mummy — `curse_on_hit` |
-| 5 | Lich (С) — `area_attack` | Death Knight (К) — `charge`, `deadly_strike` |
+| 5 | Lich (С) — `area_attack` | Death Knight (Б, К) — `charge`, `deadly_strike` |
 | 6 | Abomination (К) — танк, `poison` | Shadow Wyvern (К, Л) — `poison` |
 | 7 | Bone Dragon (К, Л) — `aura_dread` | Lich Lord (К, С) — `area_attack`, `mana_drain` |
 
@@ -221,7 +221,7 @@ packages/
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Gremlin (С) — слабый стрелок | Brass Sentry — конструкт, высокая защита |
-| 2 | Gargoyle (Л) — `poison_immune` | Stone Hound — быстрый ближний бой |
+| 2 | Gargoyle (Л) — `poison_immune` | Stone Hound (Б) — быстрый ближний бой |
 | 3 | Iron Golem — `magic_resist` | Clay Golem — `regeneration` |
 | 4 | Mage (С) — `no_melee_penalty` | Enchanter — `caster`: Haste союзнику раз в бой |
 | 5 | Genie (Л) — `caster`: случайный баф союзнику | Naga — `no_retaliation` |
@@ -231,10 +231,10 @@ packages/
 #### Эльфы (`elf`) — скорость, стрелки, контроль
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
-| 1 | Sprite (Л) — `no_retaliation` | Wood Scout — быстрый ближний бой |
+| 1 | Sprite (Л) — `no_retaliation` | Wood Scout (Б) — быстрый ближний бой |
 | 2 | Elven Archer (С) — `double_attack` при выстреле | Dryad — `entangle` |
-| 3 | Druid (С) — `no_melee_penalty` | Dire Wolf — `double_attack` |
-| 4 | Unicorn (К) — `aura_magic_resist` | Centaur (С) — высокая скорость |
+| 3 | Druid (С) — `no_melee_penalty` | Dire Wolf (Б) — `double_attack` |
+| 4 | Unicorn (Б, К) — `aura_magic_resist` | Centaur (С) — высокая скорость |
 | 5 | Treant (К) — танк, `entangle` | Ranger (С) — `ignore_range_penalty` |
 | 6 | Phoenix (Л) — `rebirth` себя раз в бой | Forest Guardian (К) — `area_attack` |
 | 7 | Silver Dragon (К, Л) — `fire_breath` | Emerald Dragon (К, Л) — ядовитое дыхание (`fire_breath` + `poison`) |
@@ -243,7 +243,7 @@ packages/
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Goblin — дешёвый | Goblin Spearthrower (С) — мало выстрелов |
-| 2 | Wolf Rider — быстрый, `double_attack` | Orc Warrior — танк |
+| 2 | Wolf Rider (Б) — быстрый, `double_attack` | Orc Warrior — танк |
 | 3 | Orc Axe Thrower (С) | Berserker — высокая атака, низкая защита |
 | 4 | Ogre — много HP | Ogre Shaman — `caster`: Bloodlust союзнику раз в бой |
 | 5 | Thunderbird (К, Л) — шанс `stun` | War Troll — `regeneration` |
@@ -253,21 +253,21 @@ packages/
 #### Демоны (`demon`) — урон, огонь, агрессия
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
-| 1 | Imp — быстрый | Familiar — `mana_drain` |
-| 2 | Hellhound — быстрый, `double_attack` | Horned Demon — танк |
-| 3 | Succubus (С) — огненный выстрел | Flame Lasher — `no_retaliation` |
-| 4 | Nightmare (К) — `charge` | Cerberus — `area_attack` (три головы) |
+| 1 | Imp (Б) — быстрый | Familiar (Б) — `mana_drain` |
+| 2 | Hellhound (Б) — быстрый, `double_attack` | Horned Demon — танк |
+| 3 | Succubus (С) — огненный выстрел | Flame Lasher (Б) — `no_retaliation` |
+| 4 | Nightmare (Б, К) — `charge` | Cerberus (Б) — `area_attack` (три головы) |
 | 5 | Infernal Fiend — `fire_aura` | Brimstone Thrower (С) — `area_attack` |
 | 6 | Efreet (Л) — `fire_immune`, `fire_aura` | Lava Brute (К) — танк, `fire_immune` |
-| 7 | Archfiend (К) — `teleport`, `no_retaliation` | Doom Lord (К) — `area_attack`, `fire_immune` |
+| 7 | Archfiend (Б, К) — `teleport`, `no_retaliation` | Doom Lord (К) — `area_attack`, `fire_immune` |
 
 #### Тёмные эльфы (`dungeon`) — яды, контроль, засады
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
-| 1 | Troglodyte — `blind_immune` | Cave Spider — `poison` |
+| 1 | Troglodyte — `blind_immune` | Cave Spider (Б) — `poison` |
 | 2 | Harpy (Л) — `return_strike` | Dark Scout (С) — слабый стрелок |
-| 3 | Shadow Crossbowman (С) | Assassin — `double_attack` |
-| 4 | Medusa (С) — `petrify` | Lizard Rider — `charge` |
+| 3 | Shadow Crossbowman (С) | Assassin (Б) — `double_attack` |
+| 4 | Medusa (С) — `petrify` | Lizard Rider (Б) — `charge` |
 | 5 | Minotaur — высокая атака | Deep Witch (С) — `caster`: Confusion раз в бой |
 | 6 | Manticore (К, Л) — `poison` | Hydra (К) — `all_around_attack`, `no_retaliation` |
 | 7 | Shadow Dragon (К, Л) — `fire_breath` | Shadow Matriarch (С) — `area_attack`, `mana_drain` |
@@ -276,7 +276,7 @@ packages/
 | Ур. | Базовый | Альтернативный |
 |---|---|---|
 | 1 | Dwarf Defender — высокая защита | Hammer Hurler (С) |
-| 2 | Boar Rider — `charge` | Shieldbearer — `aura_defense` |
+| 2 | Boar Rider (Б) — `charge` | Shieldbearer — `aura_defense` |
 | 3 | Rune Caster (С) — `no_melee_penalty` | Clan Elder — много HP, `unlimited_retaliation` |
 | 4 | Ironguard — танк | Ballista Crew (С) — медленный, `ignore_range_penalty` |
 | 5 | Roc (К, Л) | Mountain Bear (К) — `double_attack` |
@@ -289,7 +289,7 @@ packages/
 
 Стартовые характеристики подбираются по правилам, затем корректируются по статистике (§13):
 - «сила» юнита (эффективный урон × эффективное HP с учётом скорости, инициативы и способностей) растёт с уровнем примерно в 1.8–2.2 раза за уровень;
-- `weight` пропорционален «силе», чтобы армии одного веса были сопоставимы;
+- `weight` пропорционален «силе», чтобы армии одного веса были сопоставимы. Цены характеристик и способностей в формуле «силы» калибруются по боям ботов; то, что формула не объясняет, задаётся поправкой к «силе» отдельного юнита (`POWER_CALIBRATION`, в пределах ±25%). Общая сила расы, которая зависит от состава её ролей (§5.6), выравнивается поправкой расы (`RACE_POWER_CALIBRATION`, единицы процентов) по целевому балансу рас (§13). Вес округляется до 0.01;
 - каждая раса имеет выраженную роль (например, некроманты — живучесть, демоны — урон, эльфы — стрелки) и не имеет слабых уровней по всем параметрам сразу;
 - базовый и альтернативный юнит одного уровня отличаются ролью (ближний бой / стрелок, скорость / живучесть, способность), «сила» в пределах ±10%.
 
@@ -471,6 +471,7 @@ damage = max(1, floor(base * attackMultiplier * modifiers))
 | Стрелок стреляет, находясь вплотную к врагу | 0.5 |
 | Стрелок стреляет дальше `range` | 0.5 |
 | Ответный удар | 1.0 |
+| Роль атакующего бьёт роль цели (треугольник ролей, §5.6) | 2.0 (тяжёлые по мобильным — 1.7) |
 | Эффекты заклинаний/способностей | по описанию |
 
 Применение урона: снимается с `topHp`, затем целыми существами; `count` уменьшается.
@@ -483,6 +484,18 @@ damage = max(1, floor(base * attackMultiplier * modifiers))
 - **Дальний бой** — по любой клетке поля; дальше `range` — штраф 50%. Расходует 1 выстрел. Ответного удара нет. Без выстрелов или вплотную к врагу стрелок может атаковать в ближнем бою.
 - **Летящие** — игнорируют препятствия и юнитов при движении (дистанция — по прямой, Chebyshev).
 - **Движение** — по 8 направлениям, путь ищется A*, стоимость шага 1.
+
+**Треугольник ролей.** Каждый юнит имеет роль: стрелки (`shooter`, все **С**), мобильные (`mobile`: летающие **Л** и наземные быстрые **Б**) и тяжёлые (`heavy`: остальные). Роли бьют друг друга по кругу:
+
+| Атакующий | Сильнее против | Множитель урона |
+|---|---|---|
+| Стрелки | тяжёлых — медленные, не успевают дойти | ×2.0 |
+| Тяжёлые | мобильных — встречают удар, отвечают ответным | ×1.7 |
+| Мобильные | стрелков — быстро сокращают дистанцию | ×2.0 |
+
+Множитель действует на любой удар юнита по юниту, включая выстрел, ответный удар и вторичные цели (`area_attack`, `chain_attack` и т. п.); на заклинания и `fire_aura` — нет. Яд считается от уже усиленного удара. Бонус тяжёлых меньше: стрелков в армиях около 1/4, и при равных бонусах роли не были бы равноценны в среднем.
+
+Расы различаются долей ролей в составе, отсюда «камень-ножницы-бумага» между расами (§13): слабая в среднем раса имеет выгодные встречи с сильными, а в командных режимах союзники закрывают слабые стороны друг друга.
 
 | Способность | Описание |
 |---|---|
@@ -877,6 +890,11 @@ Battle Screen
   - доля побед первой ходящей стороны;
   - доля боёв, закончившихся по лимиту раундов;
   - время ожидания матча и доля ушедших в бой с ботом.
+- **Целевой баланс рас** (бои ботов Normal, 1v1, уровни 1–30; проверка — `pnpm --filter @hb/game-core balance`):
+  - разброс средней доли побед рас (макс − мин) ≤ 20 п.п.;
+  - самая слабая в среднем раса обыгрывает самую сильную в личной встрече;
+  - есть цикл через все расы, где каждая обыгрывает следующую («камень-ножницы-бумага», §5.6).
+- **Эффективность юнитов** за свой вес сравнивается с юнитами того же уровня (`pnpm --filter @hb/game-core units`); выбросы исправляются ценами в формуле «силы» или поправкой юнита (§4.1). Бот почти не использует скорость и инициативу, поэтому их цена не опускается ниже минимума даже если боты их не ценят.
 - Игровые данные (юниты, заклинания, константы) лежат в `game-core` и версионируются (`balanceVersion`). Изменение баланса — релиз `game-core` в Cloud Functions и клиенте; клиент с устаревшей версией получает требование обновиться перед PvP.
 
 ---

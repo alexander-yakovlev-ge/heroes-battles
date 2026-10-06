@@ -12,6 +12,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "simulate": "tsc -p tsconfig.build.json && node scripts/simulate.mjs"
+    "simulate": "tsc -p tsconfig.build.json && node scripts/simulate.mjs",
+    "balance": "tsc -p tsconfig.build.json && node scripts/balance.mjs",
+    "units": "tsc -p tsconfig.build.json && node scripts/units.mjs"
   }
 }

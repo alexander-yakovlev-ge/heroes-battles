@@ -80,6 +80,9 @@ export type SpellId =
 
 export type SpellSchool = 'common' | RaceId
 
+/** Роль юнита в треугольнике «стрелки > тяжёлые > мобильные > стрелки» (§5.6) */
+export type UnitRole = 'shooter' | 'heavy' | 'mobile'
+
 export interface UnitTemplate {
   id: string
   raceId: RaceId
@@ -96,6 +99,7 @@ export interface UnitTemplate {
   initiative: number
   weight: number
   isFlying: boolean
+  role: UnitRole
   ranged?: { range: number; shots: number }
   abilities: AbilityId[]
   /** Заклинания для способности `caster` (одно выбирается случайно, если их несколько) */
