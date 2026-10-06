@@ -5,9 +5,16 @@
 ## Структура
 
 ```
+apps/client/          — клиент на Expo (iOS, Android, Web): экраны, бой с ботом на Skia
+functions/            — Cloud Functions: createHero, allocatePoint, upgradeGuest
 packages/game-core/   — игровая логика: юниты, заклинания, бой, балансировка, прогрессия, боты
+packages/shared/      — типы документов Firestore и callable-функций
+packages/i18n/        — строки интерфейса и названия игровых сущностей (en, ru)
+packages/assets/      — SVG-спрайты юнитов и палитры рас
 tests/rules/          — тесты Security Rules (в эмуляторе Firebase)
-docker/               — окружение проверки: эмуляторы Firebase + раннер
+tests/functions/      — интеграционные тесты Cloud Functions (в эмуляторе)
+tests/e2e/            — e2e-сценарии web-клиента (Playwright)
+docker/               — окружение проверки: эмуляторы Firebase + web-клиент + раннер тестов
 scripts/verify.sh     — полная регрессионная проверка
 firestore.rules, database.rules.json, storage.rules — правила доступа
 ```
@@ -18,21 +25,46 @@ firestore.rules, database.rules.json, storage.rules — правила дост�
 
 ```bash
 pnpm install
-pnpm build        # сборка пакетов
+pnpm build        # сборка пакетов и функций
 pnpm typecheck    # проверка типов
 pnpm test         # юнит-тесты
 ```
+
+## Поиграть локально
+
+Эмуляторы Firebase и собранный web-клиент поднимаются одной командой — реальный Firebase-проект не нужен:
+
+```bash
+pnpm emulators    # затем открыть http://localhost:5000
+```
+
+Разработка клиента с горячей перезагрузкой (эмуляторы должны быть запущены):
+
+```bash
+pnpm --filter @hb/client setup:web   # один раз: CanvasKit для Skia на web
+pnpm --filter @hb/client web         # http://localhost:8081
+```
+
+На устройстве или симуляторе клиент ищет эмуляторы по адресу из `EXPO_PUBLIC_EMULATOR_HOST` (по умолчанию `localhost`, в эмуляторе Android — `10.0.2.2`). Для реального проекта задаются `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_APP_ID`.
 
 ## Проверка этапа (§15.1 ТЗ)
 
 После каждого крупного этапа прогоняется полная проверка всего готового функционала:
 
 ```bash
-pnpm verify                                   # эмуляторы + сборка + типы + тесты + rules
+pnpm verify                                   # эмуляторы + сборка + типы + тесты + rules + функции + сборка iOS/Android + e2e
 docker compose -f docker/compose.yml down -v  # остановить окружение
 ```
 
-Эмуляторы работают в demo-режиме (`demo-heroes-battles`) — реальный Firebase-проект не нужен.
+Скриншоты и трейсы упавших e2e-сценариев — в `tests/e2e/test-results/`.
+
+## Графика
+
+Спрайты — SVG в `packages/assets` (viewBox 100×100, юнит смотрит вправо). Нарисованы некроманты — эталон стиля; остальные расы пока показываются жетонами в цветах расы. Лист предпросмотра расы для ревью:
+
+```bash
+pnpm --filter @hb/assets preview --race necro --out preview-necro.png
+```
 
 ## Прогон боёв ботов
 

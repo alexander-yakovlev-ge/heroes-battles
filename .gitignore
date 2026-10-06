@@ -10,3 +10,5 @@ firestore-debug.log
 database-debug.log
 ui-debug.log
 .firebase/
+functions/lib/
+tests/e2e/test-results/

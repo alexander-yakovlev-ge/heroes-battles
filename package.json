@@ -10,6 +10,9 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:rules": "pnpm --filter @hb/rules-tests test:emulator",
+    "test:functions": "pnpm --filter @hb/functions-tests test:emulator",
+    "test:e2e": "pnpm --filter @hb/e2e test:e2e",
+    "emulators": "docker compose -f docker/compose.yml up --build emulators",
     "verify": "docker compose -f docker/compose.yml up --build --abort-on-container-exit --exit-code-from verify verify"
   },
   "devDependencies": {

@@ -1,10 +1,82 @@
 rules_version = '2';
 
-// Этап 1: доступ закрыт полностью. Правила по §14 ТЗ появляются вместе с коллекциями на этапах 2–3.
+// Правила доступа по §14 ТЗ. Всё, что не разрешено явно, запрещено.
+// Игровое состояние (герои, рейтинги, бои) пишут только Cloud Functions через Admin SDK — правила их не ограничивают.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    function validSettings(s) {
+      return s is map
+        && s.keys().hasOnly(['language', 'showOpponentSkins'])
+        && s.language in ['en', 'ru']
+        && s.showOpponentSkins is bool;
     }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      // Документ создаёт createHero; владелец меняет только «свои» поля (§14)
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'lastSeen', 'pushToken', 'cosmetics', 'settings'])
+        && validSettings(request.resource.data.settings)
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 3
+        && request.resource.data.displayName.size() <= 20;
+    }
+
+    match /users/{uid}/blocked/{otherUid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /heroes/{uid}       { allow read: if signedIn(); allow write: if false; }
+    match /ratings/{uid}      { allow read: if true;       allow write: if false; }
+    match /entitlements/{uid} { allow read: if isOwner(uid); allow write: if false; }
+    match /config/{doc}       { allow read: if true;       allow write: if false; }
+
+    // Пресеты армии пишет владелец; вес и открытость юнитов проверяет CF при старте боя (§6.2).
+    // Пока доступен один бесплатный пресет 'main'; дополнительные слоты — с покупками (этап 5).
+    match /armies/{uid}/presets/{presetId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && presetId == 'main'
+        && request.resource.data.keys().hasOnly(['name', 'slots'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 24
+        && request.resource.data.slots is list
+        && request.resource.data.slots.size() <= 7;
+    }
+
+    // Очередь, пати и комнаты меняются только через callable-функции (этап 3)
+    match /matchmaking/{ticketId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.uids;
+      allow write: if false;
+    }
+    match /parties/{partyId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow write: if false;
+    }
+    match /rooms/{roomId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.players;
+      allow write: if false;
+    }
+
+    match /battles/{battleId} {
+      allow read: if signedIn()
+        && (request.auth.uid in resource.data.teams.red || request.auth.uid in resource.data.teams.blue);
+      allow write: if false;
+
+      match /events/{seq} {
+        allow read: if signedIn()
+          && (request.auth.uid in get(/databases/$(database)/documents/battles/$(battleId)).data.teams.red
+              || request.auth.uid in get(/databases/$(database)/documents/battles/$(battleId)).data.teams.blue);
+        allow write: if false;
+      }
+      match /private/{doc} { allow read, write: if false; }
+    }
+
+    match /battleStats/{battleId} { allow read, write: if false; }
+    match /reports/{reportId}     { allow read, write: if false; }
   }
 }

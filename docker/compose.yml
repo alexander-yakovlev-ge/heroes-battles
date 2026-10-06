@@ -1,25 +1,32 @@
 name: heroes-battles-verify
 
+x-app: &app
+  build:
+    context: ..
+    dockerfile: docker/app.Dockerfile
+  image: heroes-battles-app:local
+
 services:
+  # Firebase Emulator Suite + собранный web-клиент: http://localhost:5000
   emulators:
-    build:
-      context: ..
-      dockerfile: docker/emulators.Dockerfile
+    <<: *app
+    command: ["firebase", "emulators:start", "--project", "demo-heroes-battles"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/"]
+      # Готовность: Firestore, Functions (функции загружены) и Hosting отвечают
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/ && curl -sf http://127.0.0.1:5000/ >/dev/null && curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{\"data\":{}}' http://127.0.0.1:5001/demo-heroes-battles/us-central1/createHero | grep -q 401"]
       interval: 3s
-      timeout: 3s
-      retries: 60
+      timeout: 5s
+      retries: 100
     ports:
+      - "5000:5000"
+      - "5001:5001"
       - "8080:8080"
       - "9000:9000"
       - "9099:9099"
       - "9199:9199"
 
   verify:
-    build:
-      context: ..
-      dockerfile: docker/verify.Dockerfile
+    <<: *app
     depends_on:
       emulators:
         condition: service_healthy
@@ -28,4 +35,9 @@ services:
       FIREBASE_DATABASE_EMULATOR_HOST: emulators:9000
       FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
       FIREBASE_STORAGE_EMULATOR_HOST: emulators:9199
+      FUNCTIONS_EMULATOR_HOST: emulators:5001
+      E2E_BASE_URL: http://emulators:5000
       CI: "true"
+    volumes:
+      # Отчёты Playwright (скриншоты и трейсы упавших сценариев) — наружу
+      - ../tests/e2e/test-results:/repo/tests/e2e/test-results

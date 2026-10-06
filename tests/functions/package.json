@@ -1,0 +1,14 @@
+{
+  "name": "@hb/functions-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:emulator": "vitest run"
+  },
+  "devDependencies": {
+    "@hb/shared": "workspace:*",
+    "firebase": "12.19.0",
+    "vitest": "5.0.3"
+  }
+}

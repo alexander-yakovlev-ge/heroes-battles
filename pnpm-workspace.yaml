@@ -3,3 +3,6 @@ packages:
   - "apps/*"
   - "functions"
   - "tests/*"
+
+onlyBuiltDependencies:
+  - "@shopify/react-native-skia"

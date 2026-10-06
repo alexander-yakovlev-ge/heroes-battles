@@ -1,0 +1,7 @@
+.expo/
+dist-web/
+dist-native/
+public/canvaskit.wasm
+expo-env.d.ts
+ios/
+android/

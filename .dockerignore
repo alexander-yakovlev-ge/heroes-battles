@@ -4,3 +4,9 @@
 **/coverage
 .git
 *.log
+functions/lib
+**/dist-web
+**/dist-native
+**/.expo
+**/test-results
+apps/client/public/canvaskit.wasm

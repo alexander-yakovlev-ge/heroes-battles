@@ -3,7 +3,6 @@
 # Запускается в контейнере verify: pnpm verify (из корня репозитория).
 set -uo pipefail
 
-declare -a NAMES=()
 declare -a RESULTS=()
 failed=0
 
@@ -21,10 +20,13 @@ step() {
   fi
 }
 
-step "Сборка пакетов" pnpm build
+step "Сборка пакетов и функций" pnpm build
 step "Проверка типов" pnpm typecheck
-step "Юнит-тесты (game-core и др.)" pnpm test
+step "Юнит-тесты (game-core, i18n, assets, client)" pnpm test
 step "Тесты Security Rules в эмуляторе" pnpm test:rules
+step "Интеграционные тесты Cloud Functions" pnpm test:functions
+step "Сборка мобильных клиентов (expo export ios/android)" pnpm --filter @hb/client export:native
+step "e2e web-клиента (Playwright)" pnpm test:e2e
 
 echo
 echo "━━━ Итог проверки ━━━"
