@@ -12,6 +12,8 @@ export interface Highlights {
   targets: Set<string>
   /** Клетки целей заклинания */
   spellCells: Set<string>
+  /** Клетки, с которых можно атаковать выбранную цель */
+  attackCells: Set<string>
   activeId: string | null
 }
 
@@ -122,6 +124,15 @@ export const BattleBoard = memo(function BattleBoard({
         {[...highlights.spellCells].map((k) => {
           const [x, y] = k.split(',').map(Number) as [number, number]
           return <Rect key={`s${k}`} x={x * cell + 2} y={y * cell + 2} width={cell - 4} height={cell - 4} color="rgba(170,110,255,0.35)" />
+        })}
+        {[...highlights.attackCells].map((k) => {
+          const [x, y] = k.split(',').map(Number) as [number, number]
+          return (
+            <Group key={`a${k}`}>
+              <Rect x={x * cell + 2} y={y * cell + 2} width={cell - 4} height={cell - 4} color="rgba(240,140,60,0.35)" />
+              <Rect x={x * cell + 2} y={y * cell + 2} width={cell - 4} height={cell - 4} color="#f08c3c" style="stroke" strokeWidth={2} />
+            </Group>
+          )
         })}
         {state.grid.obstacles.map(([x, y]) => (
           <Group key={`o${x},${y}`}>

@@ -157,6 +157,17 @@ export const uiEn = {
     enemy: 'Bot',
     hint: 'Tap a cell to move, an enemy to attack.',
     shots: 'Shots: {{count}}',
+    chooseAttackCell: 'Choose the cell to attack from, or tap the target again.',
+  },
+  prep: {
+    title: 'Preparing for battle',
+    hint: 'Your opponent is known. Split stacks if needed — the deployment on the field updates.',
+    yourArmy: 'Your army · stacks {{count}} / {{max}}',
+    enemyArmy: 'Opponent: {{name}}, level {{level}}',
+    split: 'Split',
+    splitOff: 'Split off',
+    merge: 'Merge',
+    start: 'Start battle',
   },
   log: {
     round_start: '— Round {{round}} —',

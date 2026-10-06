@@ -15,7 +15,16 @@ test('гость → армия в Замке → бой с ботом: ход �
   // Экран боя с ботом
   await id(page, 'difficulty-easy').click()
   await id(page, 'start-battle').click()
-  await expect(id(page, 'battle-board')).toBeVisible({ timeout: 60_000 })
+
+  // Подготовка: противник виден, делим стак скелетов надвое
+  await expect(id(page, 'preparation')).toBeVisible({ timeout: 60_000 })
+  await expect(id(page, 'prep-stacks')).toContainText('2 / 7')
+  await id(page, 'prep-split-0').click()
+  await id(page, 'prep-split-confirm-0').click()
+  await expect(id(page, 'prep-stacks')).toContainText('3 / 7')
+  await id(page, 'prep-start').click()
+  await expect(id(page, 'battle-board')).toBeVisible()
+  expect((await battle(page))!.units.filter((u) => u.team === 'red')).toHaveLength(3)
 
   // Ход: клик по доступной клетке перемещения
   await waitPlayerTurn(page)

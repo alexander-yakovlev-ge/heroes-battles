@@ -13,6 +13,12 @@ export async function guestWithHero(page: Page, name: string, race = 'necro') {
 }
 
 interface BattleHook {
+  phase: 'loading' | 'prep' | 'battle'
+  stacks?: number
+  attackTarget: string | null
+  attackCells: string[]
+  /** id цели → клетки, с которых её можно атаковать */
+  attacks: Record<string, string[]>
   status: string
   playerTurn: boolean
   cell: number

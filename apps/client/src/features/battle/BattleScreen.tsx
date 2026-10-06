@@ -3,7 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWind
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
-import { getSpell, getUnit, type Action, type BattleEvent, type BattleState, type SpellId } from '@hb/game-core'
+import { getSpell, getUnit, type Action, type ArmySlot, type BattleEvent, type BattleState, type SpellId } from '@hb/game-core'
 import { UnitIcon } from '../../components/UnitIcon'
 import { Button, Loading, Row } from '../../components/ui'
 import { useBattleSetup } from '../../store/battleSetup'
@@ -15,6 +15,8 @@ import {
   BOT_UID,
   activeUnit,
   applyPlayerAction,
+  attackCells,
+  prepareBotBattle,
   botStep,
   isPlayerTurn,
   playerOptions,
@@ -22,8 +24,10 @@ import {
   startBotBattle,
   unitAt,
   type BotBattle,
+  type BotPreparation,
   type Step,
 } from './controller'
+import { Preparation } from './Preparation'
 import { formatEvent, type LogLine } from './log'
 
 const BOT_DELAY_MS = 280
@@ -52,6 +56,11 @@ export default function BattleScreen() {
   const [spell, setSpell] = useState<SpellId | null>(null)
   const [spellMenu, setSpellMenu] = useState(false)
   const [inspect, setInspect] = useState<string | null>(null)
+  /** Цель ближнего боя, для которой игрок выбирает клетку атаки */
+  const [attackTarget, setAttackTarget] = useState<string | null>(null)
+  /** Подготовка к бою: противник известен, игрок делит стаки (§5.1) */
+  const [prep, setPrep] = useState<BotPreparation | null>(null)
+  const [deployed, setDeployed] = useState<ArmySlot[]>([])
   const [log, setLog] = useState<LogLine[]>([])
   const [showLog, setShowLog] = useState(Platform.OS === 'web')
   const [confirmSurrender, setConfirmSurrender] = useState(false)
@@ -90,14 +99,25 @@ export default function BattleScreen() {
   useEffect(() => {
     if (!hero || !preset || preset.slots.length === 0 || createdFor.current === battleId) return
     createdFor.current = battleId
-    const { battle, events } = startBotBattle(hero, preset.slots, difficulty, seed)
-    battleRef.current = battle
+    const p = prepareBotBattle(hero, preset.slots, difficulty, seed)
+    battleRef.current = null
+    setView(null)
+    setPrep(p)
+    setDeployed(p.playerArmy)
     setLog([])
     setSpell(null)
     setSpellMenu(false)
-    show(battle.state, { state: battle.state, events })
+    setAttackTarget(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleId, canStart])
+
+  const beginBattle = useCallback(() => {
+    if (!prep) return
+    const { battle, events } = startBotBattle(prep, deployed)
+    battleRef.current = battle
+    setPrep(null)
+    show(battle.state, { state: battle.state, events })
+  }, [prep, deployed, show])
 
   const animating = view !== null && now - view.start < totalDuration(view.steps)
 
@@ -132,8 +152,13 @@ export default function BattleScreen() {
   const options = useMemo(() => (battle && playerTurn ? playerOptions(battle) : null), [battle, playerTurn, view])
 
   const highlights: Highlights = useMemo(() => {
-    const h: Highlights = { moves: new Set(), targets: new Set(), spellCells: new Set(), activeId: state?.activeUnitId ?? null }
-    if (!options) return h
+    const h: Highlights = { moves: new Set(), targets: new Set(), spellCells: new Set(), attackCells: new Set(), activeId: state?.activeUnitId ?? null }
+    if (!options || !battle) return h
+    if (attackTarget) {
+      h.targets.add(attackTarget)
+      h.attackCells = attackCells(battle, options, attackTarget)
+      return h
+    }
     if (spell) {
       const targets = options.casts.get(spell)
       if (targets) for (const k of targets.keys()) h.spellCells.add(k)
@@ -143,7 +168,7 @@ export default function BattleScreen() {
     for (const id of options.attacks.keys()) h.targets.add(id)
     for (const id of options.shoots.keys()) h.targets.add(id)
     return h
-  }, [options, spell, state?.activeUnitId])
+  }, [options, spell, attackTarget, battle, state?.activeUnitId])
 
   const act = useCallback(
     (action: Action | null) => {
@@ -153,6 +178,7 @@ export default function BattleScreen() {
       setSpell(null)
       setSpellMenu(false)
       setInspect(null)
+      setAttackTarget(null)
       show(prev, applyPlayerAction(b, action))
     },
     [show],
@@ -166,17 +192,29 @@ export default function BattleScreen() {
         setInspect(unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)
         return
       }
-      const action = resolveTap(b, options, { x, y }, spell)
-      if (action) act(action)
-      else setInspect(unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)
+      const result = resolveTap(b, options, { x, y }, { spell, attackTarget })
+      if (result.kind === 'action') act(result.action)
+      else if (result.kind === 'chooseAttack') setAttackTarget(result.targetId)
+      else {
+        setAttackTarget(null)
+        setInspect(unitAt(b.state, { x: Math.floor(x), y: Math.floor(y) })?.id ?? null)
+      }
     },
-    [options, spell, act],
+    [options, spell, attackTarget, act],
   )
 
   // Тестовый хук для e2e на web: Playwright кликает по холсту по координатам клеток
   useEffect(() => {
-    if (Platform.OS !== 'web' || !state) return
+    if (Platform.OS !== 'web') return
+    if (!state) {
+      ;(globalThis as { __hbBattle?: unknown }).__hbBattle = { phase: prep ? 'prep' : 'loading', stacks: deployed.length }
+      return
+    }
     ;(globalThis as { __hbBattle?: unknown }).__hbBattle = {
+      phase: 'battle',
+      attackTarget,
+      attackCells: battle && options && attackTarget ? [...attackCells(battle, options, attackTarget)] : [],
+      attacks: options ? Object.fromEntries([...options.attacks].map(([id, list]) => [id, list.map((a) => `${a.from.x},${a.from.y}`)])) : {},
       status: state.status,
       round: state.round,
       playerTurn,
@@ -188,17 +226,28 @@ export default function BattleScreen() {
     }
   })
 
+  // Размер клетки: поле во всю ширину, но не выше ~60% экрана
+  const cellFor = (w: number, h: number) => {
+    const availW = Math.min(win.width - space.md * 2, 1100)
+    const availH = (win.height - insets.top - insets.bottom) * 0.62
+    return Math.max(24, Math.floor(Math.min(availW / w, availH / h)))
+  }
+
   if (!hero || !preset) return <Loading />
+  if (prep) {
+    return (
+      <View style={[s.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.sm }]}>
+        <Preparation prep={prep} deployed={deployed} onChange={setDeployed} onStart={beginBattle} cellFor={cellFor} enemyName={t('battle.enemy')} />
+      </View>
+    )
+  }
   if (!view || !state || !battle) return <Loading />
 
   const playhead = animating ? playheadAt(view.steps, now - view.start) : { index: view.steps.length, t: 0 }
   const myHero = state.heroes[hero.uid]!
   const active = activeUnit(state)
 
-  // Размер клетки: поле во всю ширину, но не выше ~60% экрана
-  const availW = Math.min(win.width - space.md * 2, 1100)
-  const availH = (win.height - insets.top - insets.bottom) * 0.62
-  const cell = Math.max(24, Math.floor(Math.min(availW / state.grid.width, availH / state.grid.height)))
+  const cell = cellFor(state.grid.width, state.grid.height)
   cellRef.current = cell
 
   const queue = state.queue.map((id) => state.units.find((u) => u.id === id)!).filter((u) => u && u.count > 0)
@@ -232,7 +281,12 @@ export default function BattleScreen() {
       </View>
 
       <View style={s.info}>
-        {spell ? (
+        {attackTarget ? (
+          <Row>
+            <Text style={s.hint}>{t('battle.chooseAttackCell')}</Text>
+            <Button small variant="ghost" title={t('common.cancel')} onPress={() => setAttackTarget(null)} testID="cancel-attack" />
+          </Row>
+        ) : spell ? (
           <Row>
             <Text style={s.hint}>
               {t(`spell.${spell}`)}: {t('battle.chooseTarget')}

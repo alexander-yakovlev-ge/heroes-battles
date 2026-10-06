@@ -1,6 +1,9 @@
 import {
   RACES,
   applyAction,
+  battleLevelOf,
+  prepareArmy,
+  validateDeployment,
   candidateActions,
   chooseBotAction,
   createBattle,
@@ -17,6 +20,7 @@ import {
   type Cell,
   type Hero,
   type Rng,
+  type RngState,
   type SpellId,
   type UnitState,
 } from '@hb/game-core'
@@ -40,22 +44,57 @@ export interface Step {
   events: BattleEvent[]
 }
 
-export function startBotBattle(hero: Hero, army: ArmySlot[], difficulty: BotDifficulty, seed: number): { battle: BotBattle; events: BattleEvent[] } {
+/**
+ * Подготовка к бою (§5.1): бот выбран, обе армии приведены к уровню боя и видны игроку.
+ * rngState — состояние генератора на момент создания боя: превью поля и сам бой совпадают.
+ */
+export interface BotPreparation {
+  hero: Hero
+  botHero: Hero
+  battleLevel: number
+  /** Армия игрока после балансировки — от неё считается допустимое разделение стаков */
+  playerArmy: ArmySlot[]
+  botArmy: ArmySlot[]
+  rngState: RngState
+  difficulty: BotDifficulty
+}
+
+export function prepareBotBattle(hero: Hero, army: ArmySlot[], difficulty: BotDifficulty, seed: number): BotPreparation {
   const rng = createRng(seed)
   // Бот: герой того же уровня, армия того же веса со случайной основной расой (§9)
   const botHero = createBotHero(BOT_UID, hero.level, rng, rng.pick(RACES))
-  const botArmy = createBotArmy(botHero, '1v1', rng)
-  const { state, events } = createBattle(
-    {
-      mode: '1v1',
-      participants: [
-        { hero, team: 'red', army },
-        { hero: botHero, team: 'blue', army: botArmy },
-      ],
-    },
-    rng,
-  )
-  return { battle: { state, rng, playerUid: hero.uid, difficulty }, events }
+  const battleLevel = battleLevelOf([hero, botHero])
+  return {
+    hero,
+    botHero,
+    battleLevel,
+    playerArmy: prepareArmy(hero, army, battleLevel, '1v1'),
+    botArmy: prepareArmy(botHero, createBotArmy(botHero, '1v1', rng), battleLevel, '1v1'),
+    rngState: rng.state(),
+    difficulty,
+  }
+}
+
+function battleInput(prep: BotPreparation, deployed: ArmySlot[]) {
+  return {
+    mode: '1v1' as const,
+    participants: [
+      { hero: prep.hero, team: 'red' as const, army: deployed },
+      { hero: prep.botHero, team: 'blue' as const, army: prep.botArmy },
+    ],
+  }
+}
+
+/** Поле с расстановкой для экрана подготовки — то же, что будет в бою с этой армией */
+export function previewBattle(prep: BotPreparation, deployed: ArmySlot[]): BattleState {
+  return createBattle(battleInput(prep, deployed), createRng(prep.rngState)).state
+}
+
+export function startBotBattle(prep: BotPreparation, deployed: ArmySlot[]): { battle: BotBattle; events: BattleEvent[] } {
+  if (validateDeployment(prep.playerArmy, deployed, '1v1').length > 0) throw new Error('Invalid deployment')
+  const rng = createRng(prep.rngState)
+  const { state, events } = createBattle(battleInput(prep, deployed), rng)
+  return { battle: { state, rng, playerUid: prep.hero.uid, difficulty: prep.difficulty }, events }
 }
 
 export const isAlive = (u: UnitState) => u.count > 0
@@ -143,49 +182,82 @@ export function playerOptions(battle: BotBattle): PlayerOptions {
   return opts
 }
 
+export type AttackOption = Extract<Action, { type: 'attack' }>
+
+export type TapResult =
+  | { kind: 'action'; action: Action }
+  /** У цели несколько клеток атаки — игрок выбирает, откуда бить */
+  | { kind: 'chooseAttack'; targetId: string }
+  | { kind: 'none' }
+
+/** Клетка атаки по умолчанию: текущая позиция, если с неё можно бить, иначе ближайшая к юниту */
+export function defaultAttack(battle: BotBattle, list: readonly AttackOption[]): AttackOption {
+  const u = activeUnit(battle.state)!
+  const dist = (a: AttackOption) => Math.max(Math.abs(a.from.x - u.x), Math.abs(a.from.y - u.y))
+  return list.reduce((best, a) => (dist(a) < dist(best) ? a : best))
+}
+
+/** Вариант атаки, клетку которого (с учётом размера атакующего) накрывает нажатие */
+function attackAtCell(battle: BotBattle, list: readonly AttackOption[], cell: Cell): AttackOption | undefined {
+  const size = getUnit(activeUnit(battle.state)!.templateId).size
+  const covering = list.filter((a) => cell.x >= a.from.x && cell.x < a.from.x + size && cell.y >= a.from.y && cell.y < a.from.y + size)
+  if (covering.length <= 1) return covering[0]
+  // Крупный атакующий: несколько вариантов накрывают клетку — берём тот, чей центр ближе
+  const d = (a: AttackOption) => (a.from.x + size / 2 - (cell.x + 0.5)) ** 2 + (a.from.y + size / 2 - (cell.y + 0.5)) ** 2
+  return covering.reduce((best, a) => (d(a) < d(best) ? a : best))
+}
+
+/** Клетки, с которых можно атаковать цель (для подсветки) */
+export function attackCells(battle: BotBattle, opts: PlayerOptions, targetId: string): Set<string> {
+  const size = getUnit(activeUnit(battle.state)!.templateId).size
+  const cells = new Set<string>()
+  for (const a of opts.attacks.get(targetId) ?? [])
+    for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) cells.add(cellKey({ x: a.from.x + dx, y: a.from.y + dy }))
+  return cells
+}
+
 /**
- * Действие по нажатию на поле. tap — точка нажатия в координатах клеток (дробная):
- * при атаке ближнего боя выбирается клетка, с которой бить, ближайшая к точке нажатия —
- * игрок указывает сторону, нажимая ближе к нужному краю цели.
+ * Разбор нажатия на поле (tap — в координатах клеток). Ближний бой: если подойти к цели можно
+ * с нескольких клеток, первое нажатие выбирает цель, второе — клетку атаки (или цель ещё раз —
+ * удар с клетки по умолчанию). Нажатие мимо отменяет выбор.
  */
-export function resolveTap(battle: BotBattle, opts: PlayerOptions, tap: { x: number; y: number }, spell: SpellId | null): Action | null {
+export function resolveTap(
+  battle: BotBattle,
+  opts: PlayerOptions,
+  tap: { x: number; y: number },
+  mode: { spell: SpellId | null; attackTarget: string | null },
+): TapResult {
   const cell = { x: Math.floor(tap.x), y: Math.floor(tap.y) }
   const target = unitAt(battle.state, cell)
+  const action = (a: Action | null | undefined): TapResult => (a ? { kind: 'action', action: a } : { kind: 'none' })
 
-  if (spell) {
-    const targets = opts.casts.get(spell)
-    if (!targets) return null
-    if (getSpell(spell).targeting === 'global') return targets.values().next().value ?? null
+  if (mode.spell) {
+    const targets = opts.casts.get(mode.spell)
+    if (!targets) return { kind: 'none' }
+    if (getSpell(mode.spell).targeting === 'global') return action(targets.values().next().value)
     // Цель заклинания — клетка юнита (левая верхняя для крупных)
     const anchor = target ? { x: target.x, y: target.y } : cell
-    return targets.get(cellKey(anchor)) ?? null
+    return action(targets.get(cellKey(anchor)))
+  }
+
+  if (mode.attackTarget) {
+    const list = opts.attacks.get(mode.attackTarget) ?? []
+    if (target?.id === mode.attackTarget && list.length > 0) return action(defaultAttack(battle, list))
+    const chosen = attackAtCell(battle, list, cell)
+    if (chosen) return action(chosen)
+    // Нажатие мимо клеток атаки — обычная обработка (выбор снимается)
   }
 
   if (target) {
     const shoot = opts.shoots.get(target.id)
-    if (shoot) return shoot
+    if (shoot) return action(shoot)
     const attacks = opts.attacks.get(target.id)
-    if (attacks && attacks.length > 0) {
-      const size = getUnit(activeUnit(battle.state)!.templateId).size
-      let best = attacks[0]!
-      let bestDist = Infinity
-      for (const a of attacks) {
-        const cx = a.from.x + size / 2
-        const cy = a.from.y + size / 2
-        const d = (cx - tap.x) ** 2 + (cy - tap.y) ** 2
-        if (d < bestDist) {
-          bestDist = d
-          best = a
-        }
-      }
-      return best
-    }
-    const ability = opts.abilities.get(target.id)
-    if (ability) return ability
-    return null
+    if (attacks && attacks.length === 1) return action(attacks[0])
+    if (attacks && attacks.length > 1) return { kind: 'chooseAttack', targetId: target.id }
+    return action(opts.abilities.get(target.id))
   }
 
-  return opts.moves.get(cellKey(cell)) ?? null
+  return action(opts.moves.get(cellKey(cell)))
 }
 
 export function applyPlayerAction(battle: BotBattle, action: Action): Step {
