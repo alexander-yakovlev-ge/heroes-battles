@@ -6,7 +6,7 @@ import { RACES, getUnit, isUnitUnlocked, maxWeight, unitCost, unitsOfRace, type 
 import { RACE_PALETTES } from '@hb/assets'
 import { UnitIcon } from '../components/UnitIcon'
 import { Button, Card, ErrorText, H2, Loading, P, Row, Screen, Segmented } from '../components/ui'
-import { MAX_STACKS, addUnit, armyErrorMessage, maxCountAt, removeAt, setCount, validate, weightOf } from '../features/castle/army'
+import { MAX_STACKS, addUnit, armyErrorMessage, maxCountAt, pairSlotOf, removeAt, setCount, swapVariant, validate, weightOf } from '../features/castle/army'
 import { UnitCard, lockReason } from '../features/castle/UnitCard'
 import { errorKey } from '../lib/errors'
 import { fmtWeight } from '../lib/format'
@@ -105,7 +105,8 @@ export default function Castle() {
         {errors.length > 0 && slots.length > 0
           ? errors.map((e, i) => {
               const [key, opts] = armyErrorMessage(e)
-              return <ErrorText key={i}>{t(key, opts)}</ErrorText>
+              const raceKey = opts?.raceKey as string | undefined
+              return <ErrorText key={i}>{t(key, raceKey ? { ...opts, race: t(raceKey) } : opts)}</ErrorText>
             })
           : null}
         <ErrorText>{error}</ErrorText>
@@ -127,18 +128,24 @@ export default function Castle() {
       <P dim>
         {t(`race.${race}`)}: {hero.raceSkills[race]}
       </P>
+      <P dim testID="hero-bonus">{t('castle.heroBonus', { attack: hero.stats.attack, defense: hero.stats.defense })}</P>
       {unitsOfRace(race).map((unit) => {
         const locked = !isUnitUnlocked(unit, hero.level, hero.raceSkills)
+        const pair = pairSlotOf(slots, unit.id)
         return (
           <UnitCard
             key={unit.id}
             unit={unit}
             cost={unitCost(unit, hero.raceSkills)}
+            heroAttack={hero.stats.attack}
+            heroDefense={hero.stats.defense}
             locked={locked}
             lockText={locked ? lockReason(t, unit, hero.level) : ''}
             inArmy={slots.some((x) => x.unitId === unit.id)}
+            pairName={pair ? t(getUnit(pair.unitId).nameKey) : null}
             canAdd={slots.length < MAX_STACKS}
             onAdd={() => update(addUnit(slots, unit.id, hero))}
+            onSwap={() => update(swapVariant(slots, unit.id, hero))}
           />
         )
       })}

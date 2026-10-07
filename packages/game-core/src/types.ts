@@ -229,7 +229,8 @@ export interface BattleState {
 export type Action =
   | { type: 'move'; unitId: string; to: Cell }
   | { type: 'attack'; unitId: string; targetId: string; from: Cell }
-  | { type: 'shoot'; unitId: string; targetId: string }
+  /** from — клетка, куда стрелок сначала переходит (не дальше shootMoveLimit, §5.6) */
+  | { type: 'shoot'; unitId: string; targetId: string; from?: Cell }
   | { type: 'wait'; unitId: string }
   | { type: 'defend'; unitId: string }
   | { type: 'ability'; unitId: string; targetId: string }

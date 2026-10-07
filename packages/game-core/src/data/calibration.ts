@@ -91,9 +91,9 @@ export const POWER_CALIBRATION: Readonly<Record<string, number>> = {
   necro_bone_dragon: 1.02,
   necro_death_knight: 0.86,
   necro_ghost: 1.12,
-  necro_ghoul: 0.91,
   necro_lich: 1.07,
   necro_lich_lord: 0.99,
+  necro_plague_zombie: 0.91,
   necro_shadow_wyvern: 0.91,
   necro_skeleton_archer: 1.12,
   necro_vampire: 1.08,
@@ -120,12 +120,12 @@ export const POWER_CALIBRATION: Readonly<Record<string, number>> = {
  * Подбирается скриптом scripts/balance.mjs.
  */
 export const RACE_POWER_CALIBRATION: Readonly<Partial<Record<RaceId, number>>> = {
-  knight: 1.036,
-  necro: 0.987,
-  wizard: 1.042,
-  elf: 0.969,
-  barbarian: 1.034,
-  demon: 0.958,
-  dungeon: 0.968,
-  fortress: 1.014,
+  knight: 1.020,
+  necro: 1.004,
+  wizard: 1.050,
+  elf: 0.967,
+  barbarian: 1.018,
+  demon: 0.975,
+  dungeon: 0.996,
+  fortress: 1.005,
 }

@@ -16,29 +16,42 @@ export function lockReason(
   return t('castle.lockedAlt', { race: t(`race.${unit.raceId}`), skill: ALT_UNLOCK_SKILL[unit.tier] })
 }
 
-/** Карточка юнита в списке Замка: характеристики, способности, кнопка добавления */
+/**
+ * Карточка юнита в списке Замка: характеристики с учётом героя (его атака и защита прибавляются
+ * к юнитам в бою), вес за единицу с учётом навыка расы, способности; добавление или замена варианта уровня.
+ */
 export const UnitCard = memo(function UnitCard({
   unit,
   cost,
+  heroAttack,
+  heroDefense,
   locked,
   lockText,
   inArmy,
+  pairName,
   canAdd,
   onAdd,
+  onSwap,
 }: {
   unit: UnitTemplate
   cost: number
+  heroAttack: number
+  heroDefense: number
   locked: boolean
   lockText: string
   inArmy: boolean
+  /** Другой вариант этого уровня уже в армии — его название; добавить можно только заменой */
+  pairName: string | null
   canAdd: boolean
   onAdd: () => void
+  onSwap: () => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const withHero = (base: number, bonus: number) => (bonus ? t('unitInfo.withHero', { value: base + bonus, hero: bonus }) : String(base))
   const stats: [string, string][] = [
-    [t('unitInfo.attack'), String(unit.attack)],
-    [t('unitInfo.defense'), String(unit.defense)],
+    [t('unitInfo.attack'), withHero(unit.attack, heroAttack)],
+    [t('unitInfo.defense'), withHero(unit.defense, heroDefense)],
     [t('unitInfo.damage'), `${unit.damageMin}–${unit.damageMax}`],
     [t('unitInfo.health'), String(unit.health)],
     [t('unitInfo.speed'), String(unit.speed)],
@@ -60,27 +73,36 @@ export const UnitCard = memo(function UnitCard({
             {t('unitInfo.tier', { tier: unit.tier })} · {tags.join(' · ')}
           </Text>
           <Text style={locked ? s.lockText : s.meta}>{locked ? lockText : t('castle.costPerUnit', { cost: fmtWeight(cost) })}</Text>
+          {!locked && pairName ? <Text style={s.lockText}>{t('castle.pairInArmy', { name: pairName })}</Text> : null}
         </View>
         {!locked ? (
-          <Button
-            small
-            variant={inArmy ? 'ghost' : 'secondary'}
-            title={inArmy ? '✓' : t('castle.addStack')}
-            disabled={inArmy || !canAdd}
-            onPress={onAdd}
-            testID={`add-${unit.id}`}
-          />
+          pairName ? (
+            <Button small variant="secondary" title={t('castle.swap')} onPress={onSwap} testID={`swap-${unit.id}`} />
+          ) : (
+            <Button
+              small
+              variant={inArmy ? 'ghost' : 'secondary'}
+              title={inArmy ? '✓' : t('castle.addStack')}
+              disabled={inArmy || !canAdd}
+              onPress={onAdd}
+              testID={`add-${unit.id}`}
+            />
+          )
         ) : null}
       </Pressable>
+      {/* Характеристики видны сразу — с учётом героя */}
+      <View style={s.stats} testID={`stats-${unit.id}`}>
+        {stats.map(([k, v]) => (
+          <Text key={k} style={s.stat}>
+            {k}: <Text style={s.statValue}>{v}</Text>
+          </Text>
+        ))}
+      </View>
+      <Text style={s.more} onPress={() => setOpen(!open)}>
+        {open ? t('castle.hideAbilities') : t('castle.showAbilities')}
+      </Text>
       {open ? (
         <View style={s.details}>
-          <View style={s.stats}>
-            {stats.map(([k, v]) => (
-              <Text key={k} style={s.stat}>
-                {k}: <Text style={s.statValue}>{v}</Text>
-              </Text>
-            ))}
-          </View>
           <Text style={s.ability} testID={`role-hint-${unit.id}`}>
             {t(`unitInfo.roleHint_${unit.role}`)}
           </Text>
@@ -104,7 +126,8 @@ const s = StyleSheet.create({
   meta: { color: colors.textDim, fontSize: 12 },
   lockText: { color: colors.gold, fontSize: 12 },
   details: { marginTop: space.sm, gap: space.xs },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.md, rowGap: 2, marginTop: space.sm },
+  more: { color: colors.gold, fontSize: 12, marginTop: space.xs },
   stat: { color: colors.textDim, fontSize: 13 },
   statValue: { color: colors.text, fontWeight: '600' },
   ability: { color: colors.textDim, fontSize: 13 },

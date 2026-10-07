@@ -130,7 +130,10 @@ export interface PlayerOptions {
   moves: Map<string, Action>
   /** id вражеского юнита → варианты атаки ближнего боя (с разных клеток) */
   attacks: Map<string, Extract<Action, { type: 'attack' }>[]>
+  /** id цели → выстрел с места */
   shoots: Map<string, Action>
+  /** id цели → выстрелы с перемещением на часть хода (§5.6) */
+  shootMoves: Map<string, ShootOption[]>
   abilities: Map<string, Action>
   /** Заклинание → клетка цели → действие */
   casts: Map<SpellId, Map<string, Action>>
@@ -147,6 +150,7 @@ export function playerOptions(battle: BotBattle): PlayerOptions {
     moves: new Map(),
     attacks: new Map(),
     shoots: new Map(),
+    shootMoves: new Map(),
     abilities: new Map(),
     casts: new Map(),
     canWait: false,
@@ -173,7 +177,11 @@ export function playerOptions(battle: BotBattle): PlayerOptions {
         break
       }
       case 'shoot':
-        opts.shoots.set(a.targetId, a)
+        if (a.from) {
+          const list = opts.shootMoves.get(a.targetId) ?? []
+          list.push(a)
+          opts.shootMoves.set(a.targetId, list)
+        } else opts.shoots.set(a.targetId, a)
         break
       case 'ability':
         opts.abilities.set(a.targetId, a)
@@ -197,6 +205,7 @@ export function playerOptions(battle: BotBattle): PlayerOptions {
 }
 
 export type AttackOption = Extract<Action, { type: 'attack' }>
+export type ShootOption = Extract<Action, { type: 'shoot' }>
 
 export type TapResult =
   | { kind: 'action'; action: Action }
@@ -230,6 +239,21 @@ function attackAtCell(battle: BotBattle, list: readonly AttackOption[], cell: Ce
   // Крупный атакующий: несколько вариантов накрывают клетку — берём тот, чей центр ближе
   const d = (a: AttackOption) => (a.from.x + size / 2 - (cell.x + 0.5)) ** 2 + (a.from.y + size / 2 - (cell.y + 0.5)) ** 2
   return covering.reduce((best, a) => (d(a) < d(best) ? a : best))
+}
+
+/** Выстрел с перемещением, клетку которого накрывает нажатие */
+function shootAtCell(battle: BotBattle, list: readonly ShootOption[], cell: Cell): ShootOption | undefined {
+  const size = getUnit(activeUnit(battle.state)!.templateId).size
+  return list.find((a) => a.from && cell.x >= a.from.x && cell.x < a.from.x + size && cell.y >= a.from.y && cell.y < a.from.y + size)
+}
+
+/** Клетки, с которых стрелок может подойти и выстрелить в цель (для подсветки) */
+export function shootCells(battle: BotBattle, opts: PlayerOptions, targetId: string): Set<string> {
+  const size = getUnit(activeUnit(battle.state)!.templateId).size
+  const cells = new Set<string>()
+  for (const a of opts.shootMoves.get(targetId) ?? [])
+    if (a.from) for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) cells.add(cellKey({ x: a.from.x + dx, y: a.from.y + dy }))
+  return cells
 }
 
 /** Клетки, с которых можно атаковать цель (для подсветки) */
@@ -276,6 +300,8 @@ export function resolveTap(battle: BotBattle, opts: PlayerOptions, tap: { x: num
 
   if (mode.aim) {
     if (target?.id === mode.aim) return action(aimedAction(battle, opts, mode.aim, false))
+    const shot = shootAtCell(battle, opts.shootMoves.get(mode.aim) ?? [], cell)
+    if (shot) return action(shot)
     const chosen = attackAtCell(battle, opts.attacks.get(mode.aim) ?? [], cell)
     if (chosen) return action(chosen)
     // Нажатие мимо — обычная обработка (прицел снимается)

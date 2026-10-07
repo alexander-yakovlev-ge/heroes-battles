@@ -40,7 +40,7 @@ export const entitiesEn = {
     necro_skeleton: 'Skeleton',
     necro_skeleton_archer: 'Skeleton Archer',
     necro_zombie: 'Zombie',
-    necro_ghoul: 'Ghoul',
+    necro_plague_zombie: 'Plague Zombie',
     necro_ghost: 'Ghost',
     necro_banshee: 'Banshee',
     necro_vampire: 'Vampire',

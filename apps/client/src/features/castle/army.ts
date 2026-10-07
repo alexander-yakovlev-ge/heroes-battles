@@ -1,6 +1,7 @@
 import {
   MODE_CONFIG,
   armyWeight,
+  counterpartOf,
   getUnit,
   maxWeight,
   unitCost,
@@ -50,6 +51,26 @@ export function addUnit(slots: readonly ArmySlot[], unitId: string, hero: HeroLi
   return [...next, { unitId, count }]
 }
 
+/** Стак другого варианта того же уровня расы (основной ↔ альтернативный), если он уже в армии */
+export function pairSlotOf(slots: readonly ArmySlot[], unitId: string): ArmySlot | undefined {
+  const pair = counterpartOf(getUnit(unitId))
+  return pair ? slots.find((s) => s.unitId === pair.id) : undefined
+}
+
+/**
+ * На уровне расы в бой идёт один вариант юнита (§6.2): заменить стаки другого варианта на unitId,
+ * сохранив их вес (число существ — по стоимости нового юнита).
+ */
+export function swapVariant(slots: readonly ArmySlot[], unitId: string, hero: HeroLike): ArmySlot[] {
+  const pair = counterpartOf(getUnit(unitId))
+  if (!pair) return [...slots]
+  const cost = unitCost(getUnit(unitId), hero.raceSkills)
+  const pairCost = unitCost(pair, hero.raceSkills)
+  const swapped = slots.map((s) => (s.unitId === pair.id ? { unitId, count: Math.max(1, Math.floor((pairCost * s.count + EPS) / cost)) } : s))
+  // если новый вариант уже был в армии отдельным стаком — оставляем по одному стаку на юнит
+  return swapped.filter((s, i) => swapped.findIndex((x) => x.unitId === s.unitId) === i)
+}
+
 export function setCount(slots: readonly ArmySlot[], index: number, count: number): ArmySlot[] {
   const n = Math.max(1, Math.floor(Number.isFinite(count) ? count : 1))
   return slots.map((s, i) => (i === index ? { ...s, count: n } : s))
@@ -60,7 +81,7 @@ export const removeAt = (slots: readonly ArmySlot[], index: number): ArmySlot[] 
 export const validate = (slots: readonly ArmySlot[], hero: HeroLike): ArmyError[] =>
   validateArmy(slots, hero.level, hero.raceSkills, '1v1')
 
-/** Ключ локализации и параметры для ошибки армии */
+/** Ключ локализации и параметры для ошибки армии; raceKey — ключ названия расы, переводится отдельно */
 export function armyErrorMessage(e: ArmyError): [string, Record<string, unknown>?] {
   switch (e.code) {
     case 'empty':
@@ -72,6 +93,8 @@ export function armyErrorMessage(e: ArmyError): [string, Record<string, unknown>
     case 'locked_unit':
     case 'unknown_unit':
       return ['castle.errLocked']
+    case 'variant_conflict':
+      return ['castle.errVariant', { raceKey: `race.${e.raceId}`, tier: e.tier }]
     case 'bad_count':
       return ['common.errorGeneric']
   }

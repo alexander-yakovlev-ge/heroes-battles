@@ -12,3 +12,6 @@ ui-debug.log
 .firebase/
 functions/lib/
 tests/e2e/test-results/
+
+# Листы предпросмотра графики (pnpm --filter @hb/assets preview)
+packages/assets/preview-*.png

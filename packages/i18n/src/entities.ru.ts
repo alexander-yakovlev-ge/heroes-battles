@@ -41,7 +41,7 @@ export const entitiesRu: typeof entitiesEn = {
     necro_skeleton: 'Скелет',
     necro_skeleton_archer: 'Скелет-лучник',
     necro_zombie: 'Зомби',
-    necro_ghoul: 'Упырь',
+    necro_plague_zombie: 'Чумной зомби',
     necro_ghost: 'Призрак',
     necro_banshee: 'Банши',
     necro_vampire: 'Вампир',

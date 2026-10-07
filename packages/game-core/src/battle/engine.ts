@@ -35,6 +35,7 @@ import {
   hasAbility,
   hasEffect,
   rectOf,
+  shootMoveLimit,
   stackWeight,
   tmpl,
 } from './helpers.js'
@@ -490,6 +491,12 @@ export function applyAction(prev: BattleState, action: Action, actor: string, rn
           doMelee(state, u, action.targetId, action.from, rng, events)
           break
         case 'shoot':
+          if (action.from && (action.from.x !== u.x || action.from.y !== u.y)) {
+            // Перемещение на часть хода и выстрел (§5.6)
+            const pos = movePositions(state, u).get(key(action.from.x, action.from.y))
+            if (!pos || pos.steps > shootMoveLimit(u)) throw new IllegalActionError('bad_shoot_position')
+            moveTo(u, pos, events)
+          }
           doShoot(state, u, action.targetId, rng, events)
           break
         case 'ability':

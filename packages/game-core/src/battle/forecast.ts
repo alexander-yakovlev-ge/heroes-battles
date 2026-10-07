@@ -55,6 +55,9 @@ export function forecastAction(state: BattleState, action: Action): DamageForeca
     chargeCells = movePositions(s, attacker).get(action.from.y * 1000 + action.from.x)?.steps ?? 0
     attacker.x = action.from.x
     attacker.y = action.from.y
+  } else if (action.from) {
+    attacker.x = action.from.x
+    attacker.y = action.from.y
   }
   const kind = action.type === 'shoot' ? 'ranged' : 'melee'
   const opts = { kind, chargeCells } as const

@@ -329,7 +329,7 @@ describe('ближний бой и способности (§5.6)', () => {
 
   it('poison: яд наносит урон в начале хода цели; нежить иммунна', () => {
     const s = scenario([
-      { id: 'g', unit: 'necro_ghoul', count: 10, x: 0, y: 0 },
+      { id: 'g', unit: 'necro_plague_zombie', count: 10, x: 0, y: 0 },
       { id: 'e', unit: 'knight_peasant', count: 20, x: 1, y: 0, team: 'blue' },
     ])
     const r = applyAction(s, { type: 'attack', unitId: 'g', targetId: 'e', from: { x: 0, y: 0 } }, 'red', rng())
@@ -337,7 +337,7 @@ describe('ближний бой и способности (§5.6)', () => {
     expect(damageEvents(r.events, 'poison')).toHaveLength(1)
 
     const undead = scenario([
-      { id: 'g', unit: 'necro_ghoul', count: 10, x: 0, y: 0 },
+      { id: 'g', unit: 'necro_plague_zombie', count: 10, x: 0, y: 0 },
       { id: 'e', unit: 'necro_zombie', count: 100, x: 1, y: 0, team: 'blue' },
     ])
     const r2 = applyAction(undead, { type: 'attack', unitId: 'g', targetId: 'e', from: { x: 0, y: 0 } }, 'red', rng())

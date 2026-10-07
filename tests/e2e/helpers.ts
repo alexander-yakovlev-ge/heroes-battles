@@ -20,6 +20,8 @@ interface BattleHook {
   forecast: { min: number; max: number } | null
   attackCells: string[]
   shoots: string[]
+  shootCells: string[]
+  shootMoves: Record<string, string[]>
   heroStrikes: string[]
   queue: string[]
   /** id цели → клетки, с которых её можно атаковать */

@@ -1,7 +1,7 @@
 import type { Mode, Tier, UnitRole } from './types.js'
 
 /** Версия игровых данных (юниты, заклинания, константы). Меняется при любом изменении баланса. */
-export const BALANCE_VERSION = '0.3.0'
+export const BALANCE_VERSION = '0.4.0'
 
 export const MAX_LEVEL = 30
 export const MAX_LEVEL_GAP = 3
@@ -63,6 +63,8 @@ export const ELO_NEW_GAMES = 10
 export const DEFEND_BONUS = 1.3
 export const AURA_DEFENSE_BONUS = 1.2
 export const RANGED_PENALTY = 0.5
+/** Стрелок может перед выстрелом пройти эту долю своей скорости (§5.6) */
+export const SHOOT_MOVE_FRACTION = 0.5
 export const CHARGE_PER_CELL = 0.05
 export const CHARGE_MAX = 0.5
 export const PROC_CHANCE = 0.2

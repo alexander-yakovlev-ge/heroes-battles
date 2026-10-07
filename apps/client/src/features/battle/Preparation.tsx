@@ -39,7 +39,7 @@ export function Preparation({
   const proj = projFor(preview.grid.width, preview.grid.height)
 
   const highlights: Highlights = useMemo(
-    () => ({ moves: new Set(), targets: new Set(), spellCells: new Set(), attackCells: new Set(), activeId: inspect }),
+    () => ({ moves: new Set(), targets: new Set(), spellCells: new Set(), attackCells: new Set(), shootCells: new Set(), activeId: inspect }),
     [inspect],
   )
 

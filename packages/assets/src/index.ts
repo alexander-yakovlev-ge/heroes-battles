@@ -1,10 +1,10 @@
 import { getUnit, type RaceId } from '@hb/game-core'
-import { NECRO_ART } from './necro/index.js'
+import { NECRO_ART, NECRO_RIGS } from './necro/index.js'
 import { placeholderSvg } from './placeholder.js'
 import type { UnitArt } from './types.js'
 
 export { RACE_PALETTES, type RacePalette } from './palette.js'
-export type { UnitArt } from './types.js'
+export type { Attack, Bone, Motion, Rig, RigLayer, UnitArt } from './types.js'
 export { heroIconSvg } from './hero.js'
 
 /**
@@ -12,6 +12,9 @@ export { heroIconSvg } from './hero.js'
  * для остальных — временный жетон в цветах расы.
  */
 const ART: Record<string, UnitArt> = { ...NECRO_ART }
+
+/** Исходники ригов для скрипта границ слоёв и теста (не для клиента) */
+export const RIG_SOURCES = { ...NECRO_RIGS }
 
 /** Расы, графика которых нарисована целиком */
 export const ILLUSTRATED_RACES: readonly RaceId[] = ['necro']

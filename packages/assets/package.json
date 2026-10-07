@@ -15,7 +15,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "preview": "tsc -p tsconfig.build.json && node scripts/preview.mjs"
+    "preview": "tsc -p tsconfig.build.json && node scripts/preview.mjs",
+    "bounds": "tsc -p tsconfig.build.json && node scripts/bounds.mjs"
   },
   "dependencies": {
     "@hb/game-core": "workspace:*"

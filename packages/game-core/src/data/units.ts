@@ -150,7 +150,7 @@ const necro = race(
     1: [{ slug: 'skeleton', mod: { hp: 0.9 } }, { slug: 'skeleton_archer', ranged: true }],
     2: [
       { slug: 'zombie', mod: { atk: -1, hp: 1.5, spd: -1, init: -2 } },
-      { slug: 'ghoul', role: 'mobile', abilities: ['poison'], mod: { hp: 0.85, spd: 1, init: 1 } },
+      { slug: 'plague_zombie', role: 'mobile', abilities: ['poison'], mod: { hp: 0.85, spd: 1, init: 1 } },
     ],
     3: [
       { slug: 'ghost', flying: true, abilities: ['incorporeal'], mod: { hp: 0.8 } },

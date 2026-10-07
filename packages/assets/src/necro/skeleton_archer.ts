@@ -1,34 +1,84 @@
-import { C, bone, foot, pelvis, ribcage, shadow, shape, skull, stroke, svg, tint } from './kit.js'
+import { Art, C, INK, T, bone, boneFoot, boneHand, fill, forearm, groundShadow, line, pelvis, ribcage, skull, smooth, spine, tatters, tint, vol, shade, spec } from './kit.js'
 
-/** Скелет-лучник: рваный капюшон, костяной лук, колчан за спиной */
-export const skeletonArcher = svg(
-  shadow(50, 20) +
-    // колчан
-    shape('M36,30 L44,28 L46,52 L39,54 Z', C.woodDark) +
-    stroke([[38, 29], [36, 22]], 1.4, C.bone, 1.2) +
-    stroke([[41, 28], [40, 20]], 1.4, C.bone, 1.2) +
-    stroke([[43, 28], [44, 21]], 1.4, C.bone, 1.2) +
-    `<path d="M35,21 l2,-3 l1,3 Z M39,19 l2,-3 l1,3 Z M43,20 l2,-3 l1,3 Z" fill="${C.purpleLight}" stroke="${C.ink}" stroke-width="0.8"/>` +
-    // дальняя рука, держит лук
-    bone([[52, 38], [62, 43], [71, 45]], 3.2, C.boneShade) +
-    // ноги
-    bone([[47, 62], [42, 75], [41, 89]], 3.4, C.boneShade) +
-    foot(41, 90, 6) +
-    bone([[52, 62], [56, 75], [57, 89]]) +
-    foot(57, 90, 7) +
-    pelvis(50, 61) +
-    ribcage(50, 34, 56, 9) +
-    // лук и стрела
-    `<path d="M70,22 C80,30 80,60 70,68" fill="none" stroke="${C.ink}" stroke-width="5.2" stroke-linecap="round"/>` +
-    `<path d="M70,22 C80,30 80,60 70,68" fill="none" stroke="${C.boneShade}" stroke-width="3" stroke-linecap="round"/>` +
-    `<path d="M70,22 L58,45 L70,68" fill="none" stroke="${C.bandage}" stroke-width="0.8"/>` +
-    stroke([[57, 45], [86, 45]], 1.3, C.wood, 1.2) +
-    `<path d="M86,45 l-4,-2.6 v5.2 Z" fill="${C.metalLight}" stroke="${C.ink}" stroke-width="0.8"/>` +
-    `<path d="M58,45 l-3,-2.5 M58,45 l-3,2.5" stroke="${C.purpleLight}" stroke-width="1.6"/>` +
-    // ближняя рука натягивает тетиву
-    bone([[54, 38], [50, 46], [57, 45]]) +
-    // капюшон
-    shape('M43,24 C42,12 52,8 60,11 C66,14 66,20 64,23 L60,20 C56,16 48,17 47,26 L48,34 L42,36 L44,30 Z', C.cloth) +
-    skull(55, 23, 8.5) +
-    tint('M47,14 C51,10 57,10 61,12 C56,12 51,14 48,18 Z', C.purpleLight, 0.5),
+const a = new Art('skar')
+
+/** Рваный капюшон с плащом за плечами */
+const hoodBack = smooth([[46, 11], [52, 9.4], [57.4, 12.6], [57, 18], [52, 25], [50, 31], [45, 36], ...tatters(44, 34, 36, 6, 3, 2).slice(1), [36, 30], [40, 24], [43, 16]], true)
+const hoodFront = smooth([[45.4, 12.4], [50.6, 9.6], [56.4, 11.2], [58.4, 15.4], [55.4, 13.6], [50.6, 14.4], [48, 18.4], [48.4, 24], [46, 26], [44.6, 20]], true)
+
+/** Скелет-лучник: натягивает костяной лук, рваный капюшон, колчан за спиной */
+export const skeletonArcher = a.rig(
+  { motion: 'walk', attack: 'bow', pivots: { armFar: [53, 31.4], armNear: [54.6, 32.4], legFar: [47.6, 60], legNear: [53, 59.6], head: [50.6, 25] } },
+  [
+    ['root',
+    groundShadow(a, 50, 21) +
+      // колчан за спиной с оперением
+      fill(smooth([[36, 31], [42, 28.6], [45.6, 50], [40, 52.4]], true), a.cyl(T.leather, 10), 0.7) +
+      line('M37.6,35 L43.4,33 M39,43 L44.6,41', T.leather.hi, 0.6, 0.6) +
+      line('M41,29.6 L46,46', T.leather.lo, 0.8, 0.7) +
+      ([[38.4, 30], [40.6, 29], [42.8, 28.4]] as const)
+        .map(([x, y], i) =>
+          line(`M${x},${y} L${x - 2 + i},${y - 8}`, INK, 1.2) +
+          line(`M${x},${y} L${x - 2 + i},${y - 8}`, T.wood.base, 0.6) +
+          fill(`M${x - 2 + i},${y - 8} l-1.4,-1 l-0.2,-3.4 l1.6,1.6 Z`, '#3a3240', 0.4) +
+          fill(`M${x - 2 + i},${y - 8} l1.4,-1 l0.6,-3.2 l-1.8,1.4 Z`, '#6e6188', 0.4),
+        )
+        .join('') +
+      // плащ капюшона за спиной
+      vol(a, hoodBack, T.cloth, 0.7) +
+      line('M42,24 C40,28 39,31 38,34 M45,22 C44,27 43,31 42,36', T.cloth.lo, 0.7, 0.8)],
+    ['armFar',
+      // дальняя рука держит лук
+      bone(a, [53, 31.4], [60.6, 32], 2, T.boneFar) +
+      forearm(a, [60.6, 32], [67.4, 32.4], 1.7, T.boneFar)],
+    ['legFar',
+      // дальняя нога — отставлена назад
+      bone(a, [47.6, 60], [42, 73.4], 2.2, T.boneFar) +
+      bone(a, [42, 73.4], [39.6, 88], 1.8, T.boneFar) +
+      boneFoot(a, 39.4, 90, 5.4, T.boneFar)],
+    ['root',
+      // таз, позвоночник, ближняя нога
+      spine(a, [[51, 49], [50.4, 54], [50, 57]], 1.6) +
+      pelvis(a, 50, 58.4)],
+    ['legNear',
+      bone(a, [53, 59.6], [58.6, 73], 2.4) +
+      `<ellipse cx="58.8" cy="73.2" rx="1.6" ry="1.3" fill="${a.sph(T.bone)}" stroke="${INK}" stroke-width="0.5"/>` +
+      bone(a, [58.8, 73.2], [59.6, 88], 2) +
+      boneFoot(a, 59.4, 90, 6.2)],
+    ['root',
+      // грудная клетка
+      vol(a, smooth([[43.6, 31], [47.4, 30], [48.6, 32.4], [47.6, 38], [44.6, 39]], true), T.boneFar, 0.6) +
+      ribcage(a, 49, 31.4, 48.6, 8.5) +
+      bone(a, [49, 30.4], [55.4, 31.2], 1.2) +
+      spine(a, [[50.6, 25], [50, 29.6]], 1.4) +
+      shade(a, smooth([[46, 50], [53, 49], [53, 53], [46, 53.4]], true), 0.5)],
+    ['armFar',
+      // лук: рога из кости, обмотка рукояти, тетива
+      line('M66,10 C73.6,16 74.6,26 69.6,32.6 C74.6,39 73.6,49 66,55', INK, 3.2) +
+      line('M66,10 C73.6,16 74.6,26 69.6,32.6 C74.6,39 73.6,49 66,55', T.boneOld.base, 2) +
+      line('M66.6,11.4 C72.4,16.6 73.2,25 69.4,31 M69.4,34.6 C73.2,40.6 72.4,48.6 66.6,53.6', T.bone.hi, 0.7, 0.85) +
+      fill(smooth([[68.2, 30.4], [71.2, 30.6], [71.2, 34.8], [68.2, 34.6]], true), a.cyl(T.leather, 0), 0.5) +
+      line('M66,10 L51.8,30.8 L66,55', '#d8d0bc', 0.45, 0.95) +
+      // стрела
+      line('M51.4,30.8 L83,32.2', INK, 1.3) +
+      line('M51.4,30.8 L83,32.2', T.wood.hi, 0.6) +
+      fill('M86.4,32.4 L82.2,30.4 L82.6,32.2 L82.2,34 Z', a.cyl(T.metal, 90), 0.4) +
+      fill('M52.6,30.8 l3.6,-0.2 l-2,-2 l-3.6,0.2 Z M52.6,31 l3.6,0.2 l-2,2 l-3.6,-0.2 Z', '#4a3d66', 0.4) +
+      // кисть на древке лука
+      boneHand(a, 68.4, 32.4, 85, 0.85, T.boneFar, 60) +
+      spec(a, 84.6, 32.2, 0.4, 0.9) +
+      spec(a, 70.4, 19, 0.5, 0.7)],
+    ['armNear',
+      // ближняя рука натягивает тетиву к скуле
+      bone(a, [54.6, 32.4], [45, 31], 2.2) +
+      forearm(a, [45, 31], [51.4, 30.2], 1.8) +
+      boneHand(a, 52, 30.6, 10, 0.85, T.bone, 90)],
+    ['head',
+      // голова в капюшоне
+      skull(a, 51.4, 17.6, 4.8) +
+      vol(a, hoodFront, T.cloth, 0.7) +
+      tint(smooth([[46.4, 12.4], [50.6, 10.4], [54.6, 11.2], [50.4, 12.4], [47.6, 15.6]], true), T.cloth.hi, 0.55) +
+      line('M49,15 C48,19 48.2,22 48.6,24', T.cloth.lo, 0.6, 0.8) +
+      tint(smooth([[48, 15], [54, 13.4], [56, 15.6], [50, 17]], true), '#000000', 0.35)],
+  ],
 )

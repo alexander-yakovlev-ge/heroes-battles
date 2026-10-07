@@ -8,6 +8,8 @@ import {
   applyExperience,
   armyWeight,
   balanceArmy,
+  unitsOfRace,
+  counterpartOf,
   balanceHero,
   createHero,
   createRng,
@@ -197,6 +199,25 @@ describe('армия (§4.2, §6, §8)', () => {
     expect(army.map((a) => a.unitId)).toEqual(['necro_lich', 'necro_lich', 'necro_skeleton'])
     expect(armyWeight(army, s)).toBeLessThanOrEqual(maxWeight(level))
     for (const slot of army) expect(isUnitUnlocked(getUnit(slot.unitId), level, s)).toBe(true)
+  })
+
+  it('на уровне расы в бой идёт только один вариант юнита (§6.2)', () => {
+    const s = skills({ necro: 4, knight: 4 })
+    const both = [
+      { unitId: 'necro_skeleton', count: 10 },
+      { unitId: 'necro_skeleton_archer', count: 10 },
+    ]
+    expect(validateArmy(both, 5, s, '1v1')).toEqual([{ code: 'variant_conflict', raceId: 'necro', tier: 1 }])
+    // один вариант несколькими стаками и юниты того же уровня другой расы — можно
+    expect(validateArmy([{ unitId: 'necro_skeleton', count: 5 }, { unitId: 'necro_skeleton', count: 5 }], 5, s, '1v1')).toEqual([])
+    const knightT1 = unitsOfRace('knight').find((u) => u.tier === 1 && u.variant === 'alt')!
+    expect(validateArmy([{ unitId: 'necro_skeleton', count: 5 }, { unitId: knightT1.id, count: 5 }], 5, s, '1v1')).toEqual([])
+    // при входе в бой второй вариант переводится в первый с сохранением веса
+    const army = balanceArmy(both, 5, s, '1v1')
+    expect(army.map((a) => a.unitId)).toEqual(['necro_skeleton', 'necro_skeleton'])
+    const archer = getUnit('necro_skeleton_archer')
+    expect(army[1]!.count).toBe(Math.floor((10 * archer.weight) / getUnit('necro_skeleton').weight))
+    expect(counterpartOf(archer)?.id).toBe('necro_skeleton')
   })
 
   it('армия в пределах лимита и открытая не меняется', () => {

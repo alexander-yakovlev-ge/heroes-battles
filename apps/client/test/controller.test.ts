@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createHero, forecastAction, getUnit, maxWeight, splitStack, type Hero } from '@hb/game-core'
+import { allocateRaceSkill, createHero, forecastAction, getUnit, maxWeight, splitStack, type Hero } from '@hb/game-core'
 import {
   NO_MODE,
   activeUnit,
@@ -15,6 +15,7 @@ import {
   prepareBotBattle,
   previewBattle,
   resolveTap,
+  shootCells,
   startBotBattle,
   unitAt,
   type BotBattle,
@@ -105,6 +106,36 @@ describe('бой с ботом: контроллер', () => {
       battle.state = applyPlayerAction(battle, opts.defend!).state
     }
     throw new Error('не нашлось атаки с несколькими клетками')
+  })
+
+  it('стрелок: прицел, затем голубая клетка — подойти и выстрелить', () => {
+    const archerArmy = [{ unitId: 'necro_skeleton', count: 20 }, { unitId: 'necro_zombie', count: 6 }]
+    // Скелет-лучник — альтернативный юнит: нужен навык некромантов 4 (очко навыка 3-го уровня)
+    const shooterHero = allocateRaceSkill(createHero('player', 'necro', 5), 'necro')
+    const prep = prepareBotBattle(shooterHero, [{ unitId: 'necro_skeleton_archer', count: 12 }, ...archerArmy], 'easy', 13)
+    const { battle } = startBotBattle(prep, prep.playerArmy)
+    for (let guard = 0; guard < 300 && battle.state.status === 'active'; guard++) {
+      untilPlayer(battle)
+      const opts = playerOptions(battle)
+      const entry = [...opts.shootMoves.entries()][0]
+      if (entry) {
+        const [targetId, list] = entry
+        const target = battle.state.units.find((u) => u.id === targetId)!
+        expect(resolveTap(battle, opts, { x: target.x + 0.5, y: target.y + 0.5 }, NO_MODE)).toEqual({ kind: 'aim', targetId })
+        const mode = { ...NO_MODE, aim: targetId }
+        expect(shootCells(battle, opts, targetId).size).toBe(list.length)
+        const shot = list[list.length - 1]!
+        expect(resolveTap(battle, opts, { x: shot.from!.x + 0.5, y: shot.from!.y + 0.5 }, mode)).toEqual({ kind: 'action', action: shot })
+        const archerId = activeUnit(battle.state)!.id
+        const next = applyPlayerAction(battle, shot).state
+        const moved = next.units.find((u) => u.id === archerId)!
+        expect([moved.x, moved.y]).toEqual([shot.from!.x, shot.from!.y])
+        return
+      }
+      if (!opts.defend) break
+      battle.state = applyPlayerAction(battle, opts.defend).state
+    }
+    throw new Error('стрелок так и не получил ход')
   })
 
   it('бой доигрывается до конца, если игрок только защищается', () => {

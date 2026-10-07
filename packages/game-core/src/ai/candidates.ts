@@ -1,5 +1,5 @@
 import { getSpell } from '../data/spells.js'
-import { alive, enemiesOf, findUnitState, hasAbility, tmpl } from '../battle/helpers.js'
+import { alive, enemiesOf, findUnitState, hasAbility, isAdjacentToEnemy, shootMoveLimit, tmpl } from '../battle/helpers.js'
 import { isValidSpellTarget } from '../battle/magic.js'
 import { attackPositions, movePositions } from '../battle/movement.js'
 import type { Action, BattleState, Cell } from '../types.js'
@@ -46,6 +46,14 @@ export function candidateActions(state: BattleState, uid: string): { unit: Actio
   for (const e of enemiesOf(state, u)) {
     for (const p of attackPositions(state, u, e)) unit.push({ type: 'attack', unitId: u.id, targetId: e.id, from: { x: p.x, y: p.y } })
     if (t.ranged && (u.shotsLeft ?? 0) > 0) unit.push({ type: 'shoot', unitId: u.id, targetId: e.id })
+  }
+  // Перемещение на часть хода и выстрел (§5.6): только в клетки не вплотную к врагу —
+  // вплотную выстрел со штрафом, такой ход бессмыслен
+  if (t.ranged && (u.shotsLeft ?? 0) > 0) {
+    const limit = shootMoveLimit(u)
+    const spots = [...movePositions(state, u).values()].filter((p) => p.steps > 0 && p.steps <= limit && !isAdjacentToEnemy(state, u, p))
+    for (const e of enemiesOf(state, u))
+      for (const p of spots) unit.push({ type: 'shoot', unitId: u.id, targetId: e.id, from: { x: p.x, y: p.y } })
   }
   if (hasAbility(u, 'caster') && !u.casterUsed && t.casterSpells) {
     for (const target of state.units.filter(alive)) {

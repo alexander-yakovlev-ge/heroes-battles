@@ -1,4 +1,4 @@
-import { isUnitUnlocked, unitCost } from '../army.js'
+import { counterpartOf, isUnitUnlocked, unitCost } from '../army.js'
 import { MODE_CONFIG, maxWeight } from '../constants.js'
 import { UNITS } from '../data/units.js'
 import { allocateRaceSkill, allocateStat, createHero } from '../hero.js'
@@ -25,12 +25,15 @@ export function createBotArmy(hero: Hero, mode: Mode, rng: Rng): ArmySlot[] {
     (u) => isUnitUnlocked(u, hero.level, hero.raceSkills) && hero.raceSkills[u.raceId] >= 1,
   )
   const pool = available.length > 0 ? available : UNITS.filter((u) => u.tier === 1 && u.raceId === hero.startingRace)
+  // Один вариант на уровень расы (§6.2): вместе с юнитом «занимается» и его пара
   const chosen = new Set<string>()
   const picks = []
   while (picks.length < stacks && chosen.size < pool.length) {
     const u = rng.pick(pool)
     if (chosen.has(u.id)) continue
     chosen.add(u.id)
+    const pair = counterpartOf(u)
+    if (pair && pool.includes(pair)) chosen.add(pair.id)
     picks.push(u)
   }
   const share = limit / picks.length

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import {
   forecastAction,
   getSpell,
+  shootMoveLimit,
   getUnit,
   type Action,
   type ArmySlot,
@@ -30,6 +31,7 @@ import {
   applyPlayerAction,
   attackCells,
   botStep,
+  shootCells,
   isPlayerHeroTurn,
   isPlayerTurn,
   movePath,
@@ -199,6 +201,7 @@ export default function BattleScreen() {
       targets: new Set(),
       spellCells: new Set(),
       attackCells: new Set(),
+      shootCells: new Set(),
       activeId: state?.activeUnitId ?? null,
     }
     if (!options || !battle) return h
@@ -215,6 +218,7 @@ export default function BattleScreen() {
     if (aim) {
       h.targets.add(aim)
       h.attackCells = attackCells(battle, options, aim)
+      h.shootCells = shootCells(battle, options, aim)
       return h
     }
     for (const k of options.moves.keys()) h.moves.add(k)
@@ -279,6 +283,8 @@ export default function BattleScreen() {
       aim,
       forecast,
       attackCells: battle && options && aim && !heroStrike ? [...attackCells(battle, options, aim)] : [],
+      shootCells: battle && options && aim && !heroStrike ? [...shootCells(battle, options, aim)] : [],
+      shootMoves: options ? Object.fromEntries([...options.shootMoves].map(([id, list]) => [id, list.map((a) => `${a.from!.x},${a.from!.y}`)])) : {},
       attacks: options ? Object.fromEntries([...options.attacks].map(([id, list]) => [id, list.map((a) => `${a.from.x},${a.from.y}`)])) : {},
       shoots: options ? [...options.shoots.keys()] : [],
       heroStrikes: options ? [...options.heroStrikes.keys()] : [],
@@ -329,7 +335,8 @@ export default function BattleScreen() {
           ) : null}
           <Text style={s.dim}>
             {t('battle.aimHint')}
-            {!heroStrike && options?.attacks.has(aim) && !options.shoots.has(aim) ? ` ${t('battle.aimHintCells')}` : ''}.
+            {!heroStrike && options?.attacks.has(aim) && !options.shoots.has(aim) ? ` ${t('battle.aimHintCells')}` : ''}
+            {!heroStrike && options?.shootMoves.has(aim) ? ` ${t('battle.aimHintShootCells', { cells: activeUnit(state) ? shootMoveLimit(activeUnit(state)!) : 1 })}` : ''}.
           </Text>
         </View>
         <Button small variant="ghost" title={t('common.cancel')} onPress={() => setAim(null)} testID="cancel-aim" />

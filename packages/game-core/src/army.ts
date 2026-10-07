@@ -1,5 +1,5 @@
 import { ALT_UNLOCK_SKILL, MODE_CONFIG, TIER_UNLOCK_LEVEL, WEIGHT_MULTIPLIER, maxWeight } from './constants.js'
-import { baseUnitOf, findUnit, getUnit } from './data/units.js'
+import { UNITS, baseUnitOf, findUnit, getUnit } from './data/units.js'
 import type { ArmySlot, Mode, RaceId, Tier, UnitTemplate } from './types.js'
 
 const EPS = 1e-9
@@ -25,6 +25,29 @@ export type ArmyError =
   | { code: 'locked_unit'; unitId: string }
   | { code: 'bad_count'; unitId: string }
   | { code: 'overweight'; weight: number; max: number }
+  | { code: 'variant_conflict'; raceId: RaceId; tier: Tier }
+
+/** Ключ пары «раса + уровень»: на каждом уровне расы в бой идёт только один вариант юнита (§6.2) */
+const tierKey = (u: UnitTemplate) => `${u.raceId}:${u.tier}`
+
+/** Уровни рас, на которых в армии есть и базовый, и альтернативный юнит (§6.2) */
+export function variantConflicts(slots: readonly ArmySlot[]): { raceId: RaceId; tier: Tier }[] {
+  const seen = new Map<string, UnitTemplate['variant']>()
+  const out: { raceId: RaceId; tier: Tier }[] = []
+  for (const s of slots) {
+    const u = findUnit(s.unitId)
+    if (!u) continue
+    const prev = seen.get(tierKey(u))
+    if (prev === undefined) seen.set(tierKey(u), u.variant)
+    else if (prev !== u.variant && !out.some((c) => c.raceId === u.raceId && c.tier === u.tier)) out.push({ raceId: u.raceId, tier: u.tier })
+  }
+  return out
+}
+
+/** Другой вариант того же уровня расы: для базового — альтернативный и наоборот */
+export function counterpartOf(unit: UnitTemplate): UnitTemplate | undefined {
+  return UNITS.find((u) => u.raceId === unit.raceId && u.tier === unit.tier && u.variant !== unit.variant)
+}
 
 export function validateArmy(
   slots: readonly ArmySlot[],
@@ -48,6 +71,7 @@ export function validateArmy(
     weight += unitCost(unit, raceSkills) * Math.max(0, s.count)
   }
   if (weight > maxWeight(level) + EPS) errors.push({ code: 'overweight', weight, max: maxWeight(level) })
+  for (const c of variantConflicts(slots)) errors.push({ code: 'variant_conflict', ...c })
   return errors
 }
 
@@ -65,7 +89,8 @@ function substitute(unit: UnitTemplate, level: number, raceSkills: Record<RaceId
 
 /**
  * Приведение армии к уровню боя (§8, п. 4–5):
- * лишние стаки отбрасываются, закрытые юниты заменяются с сохранением веса, затем армия урезается до лимита.
+ * лишние стаки отбрасываются, закрытые юниты заменяются с сохранением веса, на каждом уровне расы
+ * остаётся один вариант юнита (§6.2), затем армия урезается до лимита.
  */
 export function balanceArmy(
   slots: readonly ArmySlot[],
@@ -85,6 +110,21 @@ export function balanceArmy(
       const { skinId: _skin, ...rest } = s
       return { ...rest, unitId: replacement.id, count }
     })
+
+  // Один вариант на уровень расы: стаки другого варианта переводятся в вариант первого по порядку стака
+  // с сохранением веса (старые пресеты, сохранённые до правила)
+  const chosen = new Map<string, UnitTemplate>()
+  army = army.map((s) => {
+    const unit = getUnit(s.unitId)
+    const keep = chosen.get(tierKey(unit))
+    if (!keep) {
+      chosen.set(tierKey(unit), unit)
+      return s
+    }
+    if (keep.id === unit.id) return s
+    const { skinId: _skin, ...rest } = s
+    return { ...rest, unitId: keep.id, count: Math.max(1, Math.floor((s.count * unit.weight) / keep.weight)) }
+  })
 
   const cost = (s: ArmySlot) => unitCost(getUnit(s.unitId), raceSkills)
   const total = () => army.reduce((sum, s) => sum + cost(s) * s.count, 0)

@@ -9,9 +9,9 @@ export const BACK_SCALE = 0.8
 /** Наклон: высота ряда относительно его ширины */
 export const TILT = 0.78
 /** Запас сверху под спрайты дальнего ряда и летающих — в ширинах клетки */
-export const HEADROOM = 1.0
-/** Спрайт крупнее клетки — юниты «встают» над полем */
-export const SPRITE_K = 1.4
+export const HEADROOM = 1.3
+/** Спрайт крупнее клетки — юниты «встают» над полем и заметно крупнее жетонов клеток */
+export const SPRITE_K = 1.75
 
 export interface Point {
   x: number

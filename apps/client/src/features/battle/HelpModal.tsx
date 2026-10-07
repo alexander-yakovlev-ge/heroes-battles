@@ -4,7 +4,7 @@ import { HERO_INITIATIVE } from '@hb/game-core'
 import { Button } from '../../components/ui'
 import { colors, radius, space } from '../../theme'
 
-const KEYS = ['helpTurns', 'helpAttack', 'helpWait', 'helpDefend', 'helpRanged', 'helpRoles', 'helpStats', 'helpMana'] as const
+const KEYS = ['helpTurns', 'helpAttack', 'helpWait', 'helpDefend', 'helpRanged', 'helpShootMove', 'helpRoles', 'helpStats', 'helpMana'] as const
 
 /** Справка по бою: очередь, атака в два нажатия, действия, штрафы, роли */
 export function HelpModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {

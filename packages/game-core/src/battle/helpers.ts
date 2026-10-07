@@ -1,4 +1,4 @@
-import { AURA_DEFENSE_BONUS, DEFEND_BONUS } from '../constants.js'
+import { AURA_DEFENSE_BONUS, DEFEND_BONUS, SHOOT_MOVE_FRACTION } from '../constants.js'
 import { getUnit } from '../data/units.js'
 import { key, obstacleSet, rectCells, rectsAdjacent, type Rect } from '../grid.js'
 import type { AbilityId, BattleHero, BattleState, Cell, EffectId, Team, UnitState, UnitTemplate } from '../types.js'
@@ -55,8 +55,11 @@ export function unitAtCell(state: BattleState, cell: Cell): UnitState | undefine
   })
 }
 
-export const isAdjacentToEnemy = (state: BattleState, u: UnitState) =>
-  enemiesOf(state, u).some((e) => rectsAdjacent(rectOf(u), rectOf(e)))
+export const isAdjacentToEnemy = (state: BattleState, u: UnitState, at?: Cell) =>
+  enemiesOf(state, u).some((e) => rectsAdjacent(rectOf(u, at), rectOf(e)))
+
+/** Сколько клеток стрелок может пройти перед выстрелом в тот же ход (§5.6) */
+export const shootMoveLimit = (u: UnitState) => Math.max(1, Math.floor(effectiveSpeed(u) * SHOOT_MOVE_FRACTION))
 
 const adjacentAllyWith = (state: BattleState, u: UnitState, a: AbilityId) =>
   alliesOf(state, u).some((x) => hasAbility(x, a) && rectsAdjacent(rectOf(u), rectOf(x)))

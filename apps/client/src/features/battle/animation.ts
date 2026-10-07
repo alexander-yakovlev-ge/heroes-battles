@@ -1,4 +1,5 @@
 import { getSpell, type BattleEvent, type Cell, type Team, type UnitState } from '@hb/game-core'
+import type { Attack, Bone, Motion } from '@hb/assets'
 
 /**
  * Программные анимации боя (§10.1). События действия превращаются в последовательность шагов
@@ -321,4 +322,182 @@ export function poseOf(
       break
   }
   return pose
+}
+
+/** Углы костей рига, радианы (по часовой в системе спрайта, юнит смотрит вправо) */
+export type BoneAngles = Partial<Record<Bone, number>>
+
+const deg = Math.PI / 180
+
+/** Фаза удара: замах (0..0.35) → удар (0.35..0.55) → возврат; значение от windup к hit и к 0 */
+function strikeCurve(t: number, windup: number, hit: number): number {
+  if (t < 0.35) return windup * ease(t / 0.35)
+  if (t < 0.55) return windup + (hit - windup) * ease((t - 0.35) / 0.2)
+  return hit * (1 - ease((t - 0.55) / 0.45))
+}
+
+/**
+ * Анимация частей тела: шаг ногами и отмашка руками при ходьбе, галоп, взмахи крыльев,
+ * замах и удар оружием по типу атаки, натяжение лука, жест заклинания, вздрагивание от попадания.
+ */
+export function boneAngles(
+  u: UnitState,
+  steps: readonly AnimStep[],
+  ph: Playhead,
+  time: number,
+  motion: Motion,
+  attack: Attack,
+): BoneAngles {
+  const phase = phaseOf(u.id) * Math.PI * 2
+  const a: BoneAngles = {}
+  const add = (b: Bone, v: number) => (a[b] = (a[b] ?? 0) + v)
+
+  // Покой: лёгкое покачивание рук и головы, крылья и хвост дышат
+  const idle = Math.sin(time * ((2 * Math.PI) / 2.4) + phase)
+  add('armNear', 2.5 * deg * idle)
+  add('armFar', -2 * deg * idle)
+  add('head', 1.5 * deg * Math.sin(time * ((2 * Math.PI) / 3.1) + phase))
+  add('tail', 5 * deg * Math.sin(time * ((2 * Math.PI) / 2.2) + phase))
+  if (motion === 'fly') {
+    // Зависание: неторопливые взмахи
+    const flap = Math.sin(time * ((2 * Math.PI) / 0.9) + phase)
+    add('wingNear', 14 * deg * flap)
+    add('wingFar', -12 * deg * flap)
+  } else {
+    add('wingNear', 3 * deg * idle)
+    add('wingFar', -3 * deg * idle)
+  }
+
+  const step = steps[ph.index]
+  if (!step) return a
+  const t = ph.t
+
+  switch (step.kind) {
+    case 'move': {
+      if (step.unitId !== u.id) break
+      const p = pointOnPath(step.path, step.flying ? ease(t) : t)
+      if (motion === 'walk') {
+        // Шаг: ноги ходят вперёд-назад, руки — навстречу
+        const s = Math.sin(2 * Math.PI * p.frac)
+        add('legNear', -26 * deg * s)
+        add('legFar', 26 * deg * s)
+        add('armNear', 14 * deg * s)
+        add('armFar', -14 * deg * s)
+        add('head', 2 * deg * Math.abs(s))
+      } else if (motion === 'gallop') {
+        // Галоп: передние и задние ноги со сдвигом фазы, голова кивает
+        const g = 2 * Math.PI * p.frac
+        add('legNear', -30 * deg * Math.sin(g))
+        add('legFar', -22 * deg * Math.sin(g + 0.8))
+        add('legNear2', 28 * deg * Math.sin(g + 2.4))
+        add('legFar2', 22 * deg * Math.sin(g + 3.2))
+        add('head', 7 * deg * Math.sin(g + 1))
+        add('tail', -10 * deg * Math.sin(g))
+        add('armNear', 6 * deg * Math.sin(g))
+      } else if (motion === 'fly') {
+        // Перелёт: мощные взмахи, лапы поджаты
+        const f = Math.sin(t * Math.PI * 2 * 3.5)
+        add('wingNear', 38 * deg * f)
+        add('wingFar', -32 * deg * f)
+        add('legNear', 22 * deg)
+        add('legFar', 22 * deg)
+        add('tail', 8 * deg * f)
+      } else {
+        // Парение: руки и полы плаща тянутся назад
+        const k = Math.sin(Math.PI * t)
+        add('armNear', 14 * deg * k)
+        add('armFar', 12 * deg * k)
+        add('wingNear', 18 * deg * k)
+        add('wingFar', -14 * deg * k)
+        add('tail', -10 * deg * k)
+        add('legNear', 12 * deg * k)
+        add('legFar', 16 * deg * k)
+      }
+      break
+    }
+    case 'strike': {
+      if (step.sourceId !== u.id) break
+      const kind: Attack = step.ranged ? attack : attack === 'bow' ? 'swing' : attack
+      switch (kind) {
+        case 'swing':
+          // Рубящий удар: оружие заносится над головой и обрушивается вниз, шаг ближней ногой
+          add('armNear', strikeCurve(t, -75 * deg, 40 * deg))
+          add('armFar', strikeCurve(t, 12 * deg, -10 * deg))
+          add('legNear', strikeCurve(t, 6 * deg, -18 * deg))
+          add('legFar', strikeCurve(t, -4 * deg, 14 * deg))
+          add('legNear2', strikeCurve(t, 8 * deg, -8 * deg))
+          add('head', strikeCurve(t, -4 * deg, 6 * deg))
+          break
+        case 'thrust':
+          // Выпад: клинок отводится назад и выбрасывается вперёд
+          add('armNear', strikeCurve(t, -30 * deg, 14 * deg))
+          add('legNear', strikeCurve(t, 6 * deg, -22 * deg))
+          add('legFar', strikeCurve(t, -4 * deg, 16 * deg))
+          add('wingNear', strikeCurve(t, -14 * deg, 20 * deg))
+          add('wingFar', strikeCurve(t, 10 * deg, -16 * deg))
+          break
+        case 'claw':
+          // Когти: ближняя рука заносится и рвёт сверху вниз, дальняя — следом
+          add('armNear', strikeCurve(t, -60 * deg, 45 * deg))
+          add('armFar', strikeCurve(Math.max(0, t - 0.08), -45 * deg, 35 * deg))
+          add('legNear', strikeCurve(t, 4 * deg, -14 * deg))
+          add('head', strikeCurve(t, -6 * deg, 8 * deg))
+          break
+        case 'bite':
+          // Укус: голова отводится назад и бросается вниз-вперёд, крылья раскрываются
+          add('head', strikeCurve(t, -22 * deg, 26 * deg))
+          add('wingNear', strikeCurve(t, -28 * deg, 18 * deg))
+          add('wingFar', strikeCurve(t, 24 * deg, -14 * deg))
+          add('tail', strikeCurve(t, 14 * deg, -16 * deg))
+          add('legNear', strikeCurve(t, -10 * deg, 12 * deg))
+          break
+        case 'bow': {
+          // Лук: тетива натягивается к уху, отпускание — рука отлетает назад
+          const draw = t < 0.3 ? ease(t / 0.3) : 0
+          const release = t >= 0.3 ? Math.sin(Math.PI * Math.min(1, (t - 0.3) / 0.4)) : 0
+          add('armNear', -14 * deg * draw + 20 * deg * release)
+          add('armFar', -4 * deg * draw)
+          add('head', -3 * deg * draw)
+          break
+        }
+        case 'cast': {
+          // Заклинание: рука вскидывается и выбрасывает силу вперёд, голова откидывается
+          add('armNear', strikeCurve(t, -55 * deg, 12 * deg))
+          add('armFar', strikeCurve(t, -12 * deg, 6 * deg))
+          add('head', strikeCurve(t, -8 * deg, 5 * deg))
+          add('tail', strikeCurve(t, -14 * deg, 10 * deg))
+          break
+        }
+      }
+      break
+    }
+    case 'hits': {
+      const hit = step.texts.find((x) => x.targetId === u.id)
+      if (!hit || hit.kind !== 'damage') break
+      // Попадание: голова откидывается, руки вздрагивают
+      const k = Math.sin(Math.PI * Math.min(1, t * 2)) * (1 - t * 0.5)
+      add('head', -12 * deg * k)
+      add('armNear', -20 * deg * k)
+      add('armFar', -16 * deg * k)
+      add('wingNear', -20 * deg * k)
+      add('wingFar', 16 * deg * k)
+      add('legNear', 8 * deg * k)
+      break
+    }
+    case 'death': {
+      if (step.unitId !== u.id) break
+      // Гибель: конечности обмякают
+      const k = ease(Math.min(1, t / 0.6))
+      add('armNear', 35 * deg * k)
+      add('armFar', 25 * deg * k)
+      add('head', 18 * deg * k)
+      add('legNear', -14 * deg * k)
+      add('wingNear', 40 * deg * k)
+      add('wingFar', -30 * deg * k)
+      break
+    }
+    default:
+      break
+  }
+  return a
 }

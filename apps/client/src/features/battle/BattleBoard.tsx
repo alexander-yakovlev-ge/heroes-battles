@@ -4,9 +4,10 @@ import { BlendColor, Canvas, Circle, Group, Image, Line, Oval, Path, Rect, type 
 import { getUnit, type BattleState, type UnitState } from '@hb/game-core'
 import { projectileOf } from '@hb/assets'
 import { colors } from '../../theme'
-import { lastHitIndex, poseOf, visualPosition, type AnimStep, type Playhead, type Pose } from './animation'
+import { boneAngles, lastHitIndex, poseOf, visualPosition, type AnimStep, type BoneAngles, type Playhead, type Pose } from './animation'
 import { SPRITE_K, TILT, type Projection } from './projection'
-import { loadSprite } from './sprites'
+import type { RigImages } from './rig'
+import { loadRig, loadSprite } from './sprites'
 
 export interface Highlights {
   moves: Set<string>
@@ -16,6 +17,8 @@ export interface Highlights {
   spellCells: Set<string>
   /** Клетки, с которых можно атаковать выбранную цель */
   attackCells: Set<string>
+  /** Клетки, куда стрелок может подойти и выстрелить в выбранную цель */
+  shootCells: Set<string>
   activeId: string | null
 }
 
@@ -67,12 +70,18 @@ export const BattleBoard = memo(function BattleBoard({
   // Спрайты растеризуются один раз на тип юнита (асинхронно на web)
   const templates = useMemo(() => [...new Set(state.units.map((u) => u.templateId))].sort().join('|'), [state.units])
   const [sprites, setSprites] = useState<Map<string, SkImage>>(new Map())
+  // Нарисованные юниты — риг из слоёв (ноги, руки, крылья анимируются отдельно); жетоны — целым спрайтом
+  const [rigs, setRigs] = useState<Map<string, RigImages>>(new Map())
   useEffect(() => {
     let cancelled = false
     const ids = templates.split('|')
     Promise.all(ids.map((id) => loadSprite(id).then((img) => [id, img] as const))).then((pairs) => {
       if (cancelled) return
       setSprites(new Map(pairs.filter((p): p is readonly [string, SkImage] => p[1] !== null)))
+    })
+    Promise.all(ids.map((id) => loadRig(id).then((rig) => [id, rig] as const))).then((pairs) => {
+      if (cancelled) return
+      setRigs(new Map(pairs.filter((p): p is readonly [string, RigImages] => p[1] !== null)))
     })
     return () => {
       cancelled = true
@@ -107,7 +116,9 @@ export const BattleBoard = memo(function BattleBoard({
     .map((u) => {
       const t = getUnit(u.templateId)
       const pose = poseOf(u, steps, playhead, time, t.isFlying, positionOf)
-      return { u, size: t.size, pose, ...footOf(pose.x, pose.y, t.size) }
+      const rig = rigs.get(u.templateId)
+      const angles = rig ? boneAngles(u, steps, playhead, time, rig.motion, rig.attack) : {}
+      return { u, size: t.size, pose, angles, ...footOf(pose.x, pose.y, t.size) }
     })
     .filter((x) => x.pose.opacity > 0)
 
@@ -121,16 +132,45 @@ export const BattleBoard = memo(function BattleBoard({
 
   const spriteSide = (size: number, fv: number) => size * cell * proj.scale(fv) * SPRITE_K
 
-  const drawUnit = (u: UnitState, size: number, pose: Pose, fx: number, fv: number): ReactNode => {
+  const drawUnit = (u: UnitState, size: number, pose: Pose, angles: BoneAngles, fx: number, fv: number): ReactNode => {
     const side = spriteSide(size, fv)
     const ground = proj.project(fx, fv)
     const foot = proj.project(fx, fv, pose.lift)
     const sprite = sprites.get(u.templateId)
+    const rig = rigs.get(u.templateId)
+    const flash = pose.flash > 0 ? <BlendColor color={`rgba(255,60,50,${(pose.flash * 0.75).toFixed(2)})`} mode="srcATop" /> : null
+    // Координаты спрайта 0..100 → пиксели относительно точки опоры (ноги юнита)
+    const k = side / 100
+    const sx = (v: number) => -side / 2 + v * k
+    const sy = (v: number) => -side * 0.95 + v * k
+    const body = rig ? (
+      rig.layers.map((l, i) => {
+        if (!l.image) return null
+        const [bx, by, bw, bh] = l.box
+        const img = (
+          <Image key={i} image={l.image} x={sx(bx)} y={sy(by)} width={bw * k} height={bh * k} fit="fill">
+            {flash}
+          </Image>
+        )
+        const pivot = rig.pivots[l.bone]
+        const angle = angles[l.bone]
+        if (!pivot || !angle) return img
+        return (
+          <Group key={i} origin={{ x: sx(pivot[0]), y: sy(pivot[1]) }} transform={[{ rotate: angle }]}>
+            {img}
+          </Group>
+        )
+      })
+    ) : sprite ? (
+      <Image image={sprite} x={-side / 2} y={-side * 0.95} width={side} height={side} fit="fill">
+        {flash}
+      </Image>
+    ) : null
     const shadowW = side * 0.55 * (1 - Math.min(0.5, pose.lift * 0.4))
     return (
       <Group key={u.id} opacity={pose.opacity}>
         <Oval x={ground.x - shadowW / 2} y={ground.y - shadowW * TILT * 0.22} width={shadowW} height={shadowW * TILT * 0.44} color="rgba(0,0,0,0.35)" />
-        {sprite ? (
+        {body ? (
           <Group
             transform={[
               { translateX: foot.x },
@@ -140,9 +180,7 @@ export const BattleBoard = memo(function BattleBoard({
               { scaleY: pose.sy },
             ]}
           >
-            <Image image={sprite} x={-side / 2} y={-side * 0.95} width={side} height={side} fit="fill">
-              {pose.flash > 0 ? <BlendColor color={`rgba(255,60,50,${(pose.flash * 0.75).toFixed(2)})`} mode="srcATop" /> : null}
-            </Image>
+            {body}
           </Group>
         ) : null}
         {u.defending && u.count > 0 ? (
@@ -160,7 +198,7 @@ export const BattleBoard = memo(function BattleBoard({
     )
   }
 
-  for (const e of units) entities.push({ depth: e.fv + e.pose.lift * 0.01, draw: () => drawUnit(e.u, e.size, e.pose, e.fx, e.fv) })
+  for (const e of units) entities.push({ depth: e.fv + e.pose.lift * 0.01, draw: () => drawUnit(e.u, e.size, e.pose, e.angles, e.fx, e.fv) })
   entities.sort((a, b) => a.depth - b.depth)
 
   // Подсветка клеток — на земле, под юнитами
@@ -294,6 +332,7 @@ export const BattleBoard = memo(function BattleBoard({
         {[...highlights.moves].map((k) => cellQuad(k, 'rgba(217,180,90,0.32)'))}
         {[...highlights.spellCells].map((k) => cellQuad(k, 'rgba(170,110,255,0.38)'))}
         {[...highlights.attackCells].map((k) => cellQuad(k, 'rgba(240,140,60,0.4)', '#f08c3c'))}
+        {[...highlights.shootCells].map((k) => cellQuad(k, 'rgba(90,190,240,0.35)', '#5abef0'))}
         {state.units
           .filter((u) => u.count > 0)
           .map((u) =>
