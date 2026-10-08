@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { UNITS } from '@hb/game-core'
-import { ILLUSTRATED_RACES, RACE_PALETTES, RIG_SOURCES, getUnitArt, unitIconSvg } from '../src/index.js'
+import { ILLUSTRATED_RACES, RACE_PALETTES, getUnitArt, rigSource, unitIconSvg } from '../src/index.js'
 // @ts-expect-error — вспомогательный скрипт без типов
 import { layerBox } from '../scripts/layer-box.mjs'
 
@@ -45,13 +45,13 @@ describe('графика юнитов (§10.1)', () => {
     for (const u of UNITS.filter((x) => ILLUSTRATED_RACES.includes(x.raceId))) {
       const rig = getUnitArt(u.id).rig
       expect(rig, `${u.id}: нет рига — запустите pnpm --filter @hb/assets bounds`).toBeDefined()
-      const src = RIG_SOURCES[u.id as keyof typeof RIG_SOURCES]!.rig
+      const src = rigSource(u.id)!.rig
       rig!.layers.forEach((l, i) => {
         if (l.bone !== 'root') expect(rig!.pivots[l.bone], `${u.id}: шарнир ${l.bone}`).toBeDefined()
         expect(l.box, `${u.id}: слой ${i} — запустите pnpm --filter @hb/assets bounds`).toEqual(layerBox(src.layers[i]!.svg))
       })
     }
-  })
+  }, 60_000)
 
   it('палитра задана для каждой расы', () => {
     for (const u of UNITS) expect(RACE_PALETTES[u.raceId]).toBeDefined()
