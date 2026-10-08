@@ -133,6 +133,9 @@ importers:
         specifier: workspace:*
         version: link:../game-core
     devDependencies:
+      '@hb/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@resvg/resvg-js':
         specifier: 2.6.2
         version: 2.6.2
@@ -6122,9 +6125,7 @@ snapshots:
       metro-runtime: 0.84.6
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

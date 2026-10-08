@@ -3,6 +3,8 @@ import { UNITS } from '@hb/game-core'
 import { ILLUSTRATED_RACES, RACE_PALETTES, getUnitArt, rigSource, unitIconSvg } from '../src/index.js'
 // @ts-expect-error — вспомогательный скрипт без типов
 import { layerBox } from '../scripts/layer-box.mjs'
+// @ts-expect-error — данные скрипта без типов
+import { VISUALS } from '../scripts/art-brief.visuals.mjs'
 
 describe('графика юнитов (§10.1)', () => {
   it('у каждого юнита есть спрайт 100×100 и иконка', () => {
@@ -52,6 +54,12 @@ describe('графика юнитов (§10.1)', () => {
       })
     }
   }, 60_000)
+
+  it('у каждого юнита есть описание внешности для ТЗ на растровую графику (docs/art-brief.md)', () => {
+    const visuals = VISUALS as Record<string, string>
+    expect(UNITS.filter((u) => !visuals[u.id]).map((u) => u.id)).toEqual([])
+    expect(Object.keys(visuals).filter((id) => !UNITS.some((u) => u.id === id))).toEqual([])
+  })
 
   it('палитра задана для каждой расы', () => {
     for (const u of UNITS) expect(RACE_PALETTES[u.raceId]).toBeDefined()

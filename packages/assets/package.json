@@ -16,12 +16,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "preview": "tsc -p tsconfig.build.json && node scripts/preview.mjs",
-    "bounds": "tsc -p tsconfig.build.json && node scripts/bounds.mjs"
+    "bounds": "tsc -p tsconfig.build.json && node scripts/bounds.mjs",
+    "art-brief": "tsc -p tsconfig.build.json && node scripts/art-brief.mjs"
   },
   "dependencies": {
     "@hb/game-core": "workspace:*"
   },
   "devDependencies": {
+    "@hb/i18n": "workspace:*",
     "@resvg/resvg-js": "2.6.2"
   }
 }
